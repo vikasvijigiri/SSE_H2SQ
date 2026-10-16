@@ -288,11 +288,11 @@ def action(ii, J0, J1, J2, h, bplaq, bplaq_nbh1, bplaq_nbh2):
     # Heisenberg AFM only model
     # diagonal
     de  = - J0 * (ii[i] * ii[k] * ii[j] * ii[l])
-    # QMC physical energy for J1 corresponds to bonds (i,k) and (j,l) and includes a 4-spin term:
-    de +=   abs(J1) * (1.0 - ii[i]*ii[k] - ii[j]*ii[l] - ii[i]*ii[k]*ii[j]*ii[l])
-    de +=   J2 * (ii[i1] + ii[k1] - ii[j1] - ii[l1]) / 4.0 * (ii[i] + ii[k] - ii[j] - ii[l]) / 4.0
+    # Physical diagonal pair interaction on cyclic plaquette sites.
+    de += J1 * (ii[i]*ii[k] + ii[j]*ii[l])
+    de +=   J2 * (ii[i1] + ii[l1] - ii[j1] - ii[k1]) / 4.0 * (ii[i] + ii[l] - ii[j] - ii[k]) / 4.0
     de +=   J2 * (ii[i1] + ii[j1] - ii[k1] - ii[l1]) / 4.0 * (ii[i] + ii[j] - ii[k] - ii[l]) / 4.0
-    de +=   J2 * (ii[i2] + ii[k2] - ii[j2] - ii[l2]) / 4.0 * (ii[i] + ii[k] - ii[j] - ii[l]) / 4.0
+    de +=   J2 * (ii[i2] + ii[l2] - ii[j2] - ii[k2]) / 4.0 * (ii[i] + ii[l] - ii[j] - ii[k]) / 4.0
     de +=   J2 * (ii[i2] + ii[j2] - ii[k2] - ii[l2]) / 4.0 * (ii[i] + ii[j] - ii[k] - ii[l]) / 4.0    
     if abs(de) > 1e-10:
       coef_list.append(de)

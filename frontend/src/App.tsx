@@ -3,8 +3,9 @@ import { Cpu, Sparkles, FlaskConical, BarChart2, ServerOff } from 'lucide-react'
 import axios from 'axios';
 import SimulationDashboard from './pages/SimulationDashboard.tsx';
 import PhysicsPlots from './pages/PhysicsPlots.tsx';
+import BenchmarkDashboard from './pages/BenchmarkDashboard.tsx';
 
-type Page = 'simulation' | 'plots';
+type Page = 'simulation' | 'plots' | 'benchmarks';
 
 function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Page) => void, isServerReady: boolean }) {
   return (
@@ -47,6 +48,7 @@ function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Pag
               <BarChart2 className="w-3 h-3" />
               Publication Plots
             </button>
+            <button onClick={() => setPage('benchmarks')} className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-md border ${page === 'benchmarks' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'text-slate-500 border-transparent hover:text-slate-300'}`}><BarChart2 className="w-3 h-3" />ED / QMC Benchmarks</button>
           </nav>
 
           {isServerReady ? (
@@ -67,8 +69,10 @@ function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Pag
 }
 
 function App() {
-  const [page, setPage] = useState<Page>('simulation');
+  const [page, setPage] = useState<Page>(window.location.hash === '#benchmarks' ? 'benchmarks' : window.location.hash === '#plots' ? 'plots' : 'simulation');
   const [isServerReady, setIsServerReady] = useState(false);
+
+  useEffect(() => { window.history.replaceState(null, '', `#${page}`); }, [page]);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -99,6 +103,8 @@ function App() {
         <main className="max-w-7xl mx-auto px-6 py-8 relative z-10">
           <SimulationDashboard isServerReady={isServerReady} />
         </main>
+      ) : page === 'benchmarks' ? (
+        <BenchmarkDashboard />
       ) : (
         <PhysicsPlots />
       )}

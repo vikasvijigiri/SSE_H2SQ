@@ -27,6 +27,7 @@ void Geometry::build(int Lx, int Ly, int Lz)
     siteToPlaquette.clear();
     j2pairs.clear();
     j3bonds.clear();
+    j2_constant_term = 0.0;
 
     const int Ns = Lx * Ly * Lz;
 
@@ -58,7 +59,7 @@ void Geometry::build(int Lx, int Ly, int Lz)
                 };
 
                 // J3 bonds (Vertical)
-                j3bonds.push_back({i, (int)neighbors[i].sites[4]});
+                if (Lz > 1) j3bonds.push_back({i, (int)neighbors[i].sites[4]});
 
                 // XY Plaquette at (x,y,z)
                 Plaquette p;
@@ -135,9 +136,9 @@ void Geometry::build(int Lx, int Ly, int Lz)
         }
     }
     
-    // Remove duplicates if any
+    // Sort the periodic bond multiset; retain directional multiplicity.
     std::sort(j2pairs.begin(), j2pairs.end());
-    j2pairs.erase(std::unique(j2pairs.begin(), j2pairs.end()), j2pairs.end());
+    // Keep periodic parallel bonds when a dimension is two.
 
     // --------------------------------------------------
     // Expand J2 pairs into Bonds
@@ -162,8 +163,8 @@ void Geometry::build(int Lx, int Ly, int Lz)
         // Px (Columnar/Vertical): (BL + TL) - (TR + BR) -> { +, +, -, - }
         double cx[4] = { 0.25, 0.25, -0.25, -0.25 };
         
-        // Py (Staggered/Diagonal): (BL + TR) - (TL + BR) -> { +, -, +, - }
-        double cy[4] = { 0.25, -0.25, 0.25, -0.25 };
+        // Py: (BL + BR) - (TL + TR), cyclic ordering.
+        double cy[4] = { 0.25, -0.25, -0.25, 0.25 };
 
         // Iterate all 16 pairs (i in A, j in B)
         for (int i = 0; i < 4; ++i) {

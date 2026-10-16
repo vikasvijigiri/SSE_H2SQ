@@ -12,26 +12,9 @@ import pandas as pd
 from app.services.qmc_results import save_run, import_legacy, jackknife_summary
 from app.api.schemas import SimulationParams
 
-# Get exact path of exact_diagonalzation_H2SQ.py
-# The directory of this file is backend/app/services/
-# The Analysis folder is at backend/../Analysis
-current_dir = os.path.dirname(os.path.abspath(__file__))
-analysis_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "Analysis", "ED_analysis"))
-if analysis_dir not in sys.path:
-    sys.path.append(analysis_dir)
+from app.services.physics_model import exact_reference, MODEL_VERSION
 
-try:
-    from exact_diagonalzation_H2SQ import (
-        estimate_all_observables, generate_black_plaquette_indices,
-        H2SQ_hamiltonian, action, black_plaquette_neighbors,
-        generate_plaquette_neighbor_map,
-    )
-except ImportError:
-    from Analysis.ED_analysis.exact_diagonalzation_H2SQ import (
-        estimate_all_observables, generate_black_plaquette_indices,
-        H2SQ_hamiltonian, action, black_plaquette_neighbors,
-        generate_plaquette_neighbor_map,
-    )
+current_dir = os.path.dirname(os.path.abspath(__file__))
 # Registry of running QMC subprocesses keyed by client_id.
 # Used by the /cancel endpoint to kill a job mid-run.
 _active_processes: dict[str, subprocess.Popen] = {}
@@ -48,7 +31,7 @@ def cancel_job(client_id: str) -> bool:
     return True
 
 CACHE_DIR = os.path.abspath(os.path.join(current_dir, "..", "..", "files"))
-CACHE_FILE = os.path.join(CACHE_DIR, "ed_cache.json")
+CACHE_FILE = os.path.join(CACHE_DIR, "ed_cache_v3.json")
 
 
 def load_ed_cache() -> dict:
@@ -81,7 +64,7 @@ def get_ed_cache_key(params: SimulationParams) -> str:
     )
 
 
-QMC_CACHE_FILE = os.path.join(CACHE_DIR, "qmc_cache.json")
+QMC_CACHE_FILE = os.path.join(CACHE_DIR, "qmc_cache_v3.json")
 
 def load_qmc_cache() -> dict:
     if not os.path.exists(QMC_CACHE_FILE):
@@ -146,152 +129,19 @@ def get_equivalent_qmc_params(ed_params: SimulationParams) -> SimulationParams:
 
 
 async def run_ed_simulation(params: SimulationParams):
-    """Runs the actual Exact Diagonalization simulation in Python"""
-    loop = asyncio.get_running_loop()
-    spins = params.Lx * params.Ly * params.Nl
-    client_id = params.client_id
-
-    if spins > 16:
-        raise ValueError(
-            f"ED simulation is limited to a maximum of 16 spins to prevent memory overflow "
-            f"(Current spins: {spins}). Please use QMC for larger system sizes."
-        )
-
-    def _send_time_est(phase: str, eta: float):
-        """Send a time_estimate WebSocket message from the worker thread."""
-        if not client_id:
-            return
-        
-        async def _do_send():
-            from app.main import active_connections
-            # Wait up to 2 seconds for the websocket connection to be established
-            for _ in range(20):
-                if client_id in active_connections:
-                    try:
-                        await active_connections[client_id].send_text(json.dumps({
-                            "type": "time_estimate",
-                            "phase": phase,
-                            "eta": round(eta, 2),
-                        }))
-                    except Exception:
-                        pass
-                    return
-                await asyncio.sleep(0.1)
-                
-        asyncio.run_coroutine_threadsafe(_do_send(), loop)
-
-    def _run():
-        import time
-        import itertools as _it
-        import numpy as _np
-        from scipy.linalg import eigh as _eigh
-        from scipy.sparse.linalg import eigsh as _eigsh
-        from exact_diagonalzation_H2SQ import basis_no
-
-        bplaqs = generate_black_plaquette_indices(params.Lx, params.Ly)
-        neighbor_map = generate_plaquette_neighbor_map(params.Lx, params.Ly)
-        sparse = params.sparse
-        n_vals = params.n
-        dim = 2 ** spins
-
-        if sparse:
-            if dim <= 2:
-                sparse = False
-            else:
-                n_vals = min(n_vals, dim - 2)
-                if n_vals < 1:
-                    n_vals = 1
-
-        # ---- Phase 1: calibrate Hamiltonian build time ----
-        # Replicate the FULL inner loop of H2SQ_hamiltonian (action + basis_no
-        # + list appends) so the per-state cost matches exactly.
-        try:
-            CAL_N = min(500, dim)
-            _data_cal, _rows_cal, _cols_cal = [], [], []
-            t0 = time.perf_counter()
-            for idx, ii in enumerate(_it.islice(_it.product([-1, 1], repeat=spins), CAL_N)):
-                if idx % 100 == 0:
-                    import time
-                    time.sleep(0.001)
-                for i, bplaq in enumerate(bplaqs):
-                    nbh1 = bplaqs[neighbor_map[i][0]]
-                    nbh2 = bplaqs[neighbor_map[i][1]]
-                    state_list, coef_list = action(
-                        ii, params.J0, params.J1, params.J2,
-                        params.h, bplaq, nbh1, nbh2)
-                    for jc, jj in enumerate(state_list):
-                        _data_cal.append(coef_list[jc])
-                        _rows_cal.append(basis_no(ii, spins))
-                        _cols_cal.append(basis_no(jj, spins))
-            cal_secs = time.perf_counter() - t0
-            h_eta = (cal_secs / CAL_N) * max(0, dim - CAL_N)
-        except Exception:
-            h_eta = 0.0
-        _send_time_est("hamiltonian", h_eta)
-
-        # ---- Full Hamiltonian build ----
-        Hsp = H2SQ_hamiltonian(spins, params.J0, params.J1, params.J2,
-                               params.h, bplaqs, neighbor_map)
-
-        # ---- Phase 2: estimate diagonalization time via trial matvecs ----
-        # Lanczos (eigsh) costs ≈ n_vals * 3 matvecs; each matvec costs the
-        # same as one Hsp.dot(v). Time 10 trial matvecs and scale.
-        t_mv = 0.0
-        try:
-            v_trial = _np.random.randn(dim)
-            N_MV = 10
-            t_mv0 = time.perf_counter()
-            for _ in range(N_MV):
-                Hsp.dot(v_trial)
-            t_mv = (time.perf_counter() - t_mv0) / N_MV
-            if sparse:
-                # Lanczos typically needs ~3–5× n_vals matvec iterations
-                # Plus O(n_vals^2 * dim) FLOPs for orthogonalization
-                ortho_time = (n_vals**2 * dim) / 1e8  # rough guesstimate of python/numpy speed
-                diag_eta = (t_mv * n_vals * 4) + ortho_time
-            else:
-                # Dense eigh: O(dim^3); rough calibration from matvec cost
-                diag_eta = t_mv * dim * 10
-        except Exception:
-            diag_eta = 0.0
-        _send_time_est("diagonalization", diag_eta)
-
-        if not sparse or dim <= 256:
-            Wsp, Vsp = _eigh(Hsp.toarray())
-        else:
-            try:
-                # Try default ncv first
-                Wsp, Vsp = _eigsh(Hsp, k=n_vals, which="SA", return_eigenvectors=True)
-            except Exception as e:
-                # Catch ArpackError or other convergence issues
-                if dim <= 2048:
-                    # Fallback to dense for moderately small systems
-                    Wsp, Vsp = _eigh(Hsp.toarray())
-                    Wsp, Vsp = Wsp[:n_vals], Vsp[:, :n_vals]  # type: ignore
-                else:
-                    # Try again with a explicitly larger ncv and maxiter
-                    try:
-                        ncv_val = min(dim - 1, max(2 * n_vals + 1, 60))
-                        Wsp, Vsp = _eigsh(Hsp, k=n_vals, which="SA", return_eigenvectors=True, ncv=ncv_val, maxiter=100000)
-                    except Exception as e2:
-                        raise RuntimeError(f"ED Diagonalization failed to converge: {str(e2)}")
-
-        # ---- Phase 3: estimate observable calculation time ----
-        try:
-            # Observables are now fully vectorized and take ~O(dim) operations
-            obs_eta = 0.5  # Fixed minimal ETA for fully vectorized observables
-        except Exception:
-            obs_eta = 0.0
-        _send_time_est("observables", obs_eta)
-
-        df = estimate_all_observables(
-            params.Lx, params.Ly, params.Nl,
-            params.J0, params.J1, params.J2,
-            params.h, Wsp, Vsp, params.beta
-        )
-        return df.to_dict(orient="records")
-
-    return await loop.run_in_executor(None, _run)
+    """Complete finite-system reference; never silently truncate a thermal trace."""
+    if params.Nl != 1 or params.J3 != 0:
+        raise ValueError("The complete ED reference supports one layer and J3=0.")
+    reference = await asyncio.to_thread(exact_reference, {
+        "Lx": params.Lx, "Ly": params.Ly, "J0": params.J0,
+        "J1": params.J1, "J2": params.J2, "hx": params.h, "beta": params.beta,
+    })
+    values = reference["values"]
+    return [{**params.model_dump(), **values,
+             "enrg": values["E"], "enrg2": values["E2"], "enrg4": values["E4"],
+             "SMag_square": values["mz2"], "SMag_four": values["mz4"], "Mag_x": values["mx"],
+             "n_basis_vecs": reference["dimension"], "reference": reference["reference"],
+             "numerical_residual": reference["numerical_residual"], "model_version": MODEL_VERSION}]
 
 
 async def run_qmc_simulation(params: SimulationParams, client_id: Optional[str]):
@@ -554,6 +404,7 @@ n_measure {params.n_measure}
                 spin_configs = []
 
         mapped_data = [{
+            "model_version": MODEL_VERSION,
             "Lx": params.Lx,
             "Ly": params.Ly,
             "Lz": params.Lz,
@@ -650,7 +501,10 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
     
     spins_ed = ed_params.Lx * ed_params.Ly * ed_params.Nl
     
-    if not ed_record and abs(qmc_params.J3) <= 1e-6 and not debug_mode:
+    supported_ed = ed_params.Nl == 1 and abs(qmc_params.J3) <= 1e-6 and spins_ed <= 16 and (ed_params.h == 0 or spins_ed <= 10)
+    if sim_type == "ED" and not supported_ed:
+        raise ValueError("Complete ED supports one layer, J3=0, at most 16 spins at h=0 or 10 spins at nonzero field. Use 4x2 for quantum benchmarks.")
+    if not ed_record and supported_ed and not debug_mode:
         if sim_type == "ED" and spins_ed <= 16:
             run_ed_task = asyncio.create_task(run_ed_simulation(ed_params))
         elif sim_type == "QMC" and spins_ed <= 16:

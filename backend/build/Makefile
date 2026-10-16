@@ -3,7 +3,7 @@
 # ===============================
 CXX := g++
 CXXFLAGS := -O3 -std=c++17 -Wall -pedantic-errors -g \
-            -msse2 -march=native -funroll-loops -ffast-math \
+            -msse2 -march=native -funroll-loops \
             -fomit-frame-pointer -fstrict-aliasing
 ifeq ($(OS),Windows_NT)
 LDFLAGS := -static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic
@@ -87,3 +87,8 @@ debugbin:
 	@echo Debug binary built: $(DBG_TARGET)
 
 .PHONY: all clean
+
+.PHONY: benchmark
+benchmark: sse_benchmark
+sse_benchmark: ../benchmarks/runner.cpp $(filter-out ../src/main.cpp,$(SRCS)) $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/runner.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(LDFLAGS) -o sse_benchmark

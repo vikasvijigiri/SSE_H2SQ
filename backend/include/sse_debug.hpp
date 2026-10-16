@@ -85,7 +85,7 @@ static inline const char* sub_clr(OpSubtype s) {
 static inline const char* sub_nm(OpSubtype s) {
     switch (s) {
         case OpSubtype::J0_Plaquette:        return "J0_plaq ";
-        case OpSubtype::J1_Plaquette:        return "J1_plaq ";
+        case OpSubtype::J1_Plaquette:        return "J1_bond ";
         case OpSubtype::J2_Dipole:           return "J2_dip  ";
         case OpSubtype::J3_Inter:            return "J3_inter";
         case OpSubtype::TransverseX_diag:    return "hx_diag ";
@@ -229,16 +229,10 @@ inline void dbg_print_op_string(const SSEConfig&  cfg,
                           << "  sprod=" << (prod > 0 ? std::string(AGN)+"+1"+A0 : std::string(ARD)+"-1"+A0)
                           << "  " << ACY << "w=" << w << A0;
 
-            } else if (op.subtype == OpSubtype::J1_Plaquette
-                       && op.index >= 0 && op.index < (int)geom.blackPlaquettes.size()) {
-                const auto& pl = geom.blackPlaquettes[op.index];
-                int ps = cfg.spins.spin[pl.sites[0]] * cfg.spins.spin[pl.sites[2]]
-                       + cfg.spins.spin[pl.sites[1]] * cfg.spins.spin[pl.sites[3]];
-                double w = (ps == 2) ? 4.0 * std::abs(prm.J1) : 0.0;
-                std::cout << "  sites=[" << pl.sites[0] << "," << pl.sites[1]
-                          << "," << pl.sites[2] << "," << pl.sites[3] << "]"
-                          << "  " << ACY << "w=" << w << A0;
-
+            } else if (op.subtype == OpSubtype::J1_Plaquette && op.index >= 0 && op.index/2 < (int)geom.blackPlaquettes.size()) {
+                const auto& pl = geom.blackPlaquettes[op.index/2];
+                int a=op.index%2, b=a+2;
+                std::cout << " bond=" << pl.sites[a] << "-" << pl.sites[b];
             } else if (op.subtype == OpSubtype::J2_Dipole
                        && op.index >= 0 && op.index < (int)geom.j2bonds.size()) {
                 const auto& b = geom.j2bonds[op.index];
@@ -339,9 +333,9 @@ inline void dbg_print_vertex_list(
         int base     = vertex_base_vec[vi];
 
         int n_vlegs = 2;
-        if (op.subtype == OpSubtype::J0_Plaquette || op.subtype == OpSubtype::J1_Plaquette)
+        if (op.subtype == OpSubtype::J0_Plaquette)
             n_vlegs = 8;
-        else if (op.subtype == OpSubtype::J2_Dipole || op.subtype == OpSubtype::J3_Inter)
+        else if (op.subtype == OpSubtype::J1_Plaquette || op.subtype == OpSubtype::J2_Dipole || op.subtype == OpSubtype::J3_Inter)
             n_vlegs = 4;
 
         const char* sc = sub_clr(op.subtype);

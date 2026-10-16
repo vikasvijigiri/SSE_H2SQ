@@ -26,7 +26,7 @@ URLS = {"backend": "http://127.0.0.1:8000/", "frontend": "http://127.0.0.1:5173/
 def source_version():
     digest = hashlib.sha256()
     paths = [Path(__file__).resolve(), ROOT / "backend/build/Makefile", ROOT / "backend/requirements.txt", ROOT / "frontend/package-lock.json"]
-    for folder in ("backend/src", "backend/include", "backend/app", "frontend/src"):
+    for folder in ("backend/src", "backend/include", "backend/benchmarks", "backend/app", "frontend/src"):
         paths.extend(p for p in (ROOT / folder).rglob("*") if p.is_file() and p.suffix in {".py", ".cpp", ".hpp", ".ts", ".tsx", ".css"})
     paths.extend(p for p in (ROOT / "frontend").iterdir() if p.suffix in {".json", ".js", ".ts", ".html"})
     for path in sorted(set(paths)):
@@ -90,7 +90,7 @@ def prepare():
         else:
             run([npm, "ci"], ROOT / "frontend")
         stamp.write_bytes(lock.read_bytes())
-    run(["make", "-C", ROOT / "backend/build", "all"])
+    run(["make", "-C", ROOT / "backend/build", "all", "benchmark"])
     run(["make", "-C", ROOT / "backend/build", "debugbin"])
 
 

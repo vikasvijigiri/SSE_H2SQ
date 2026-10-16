@@ -12,6 +12,7 @@
 # Backend source, reference implementation and build recipes.
 !/backend/**/*.py
 !/backend/src/*.cpp
+!/backend/benchmarks/*.cpp
 !/backend/include/*.hpp
 !/backend/pyrefly.toml
 !/backend/pyrightconfig.json
