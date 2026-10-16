@@ -1,54 +1,82 @@
-# Code-only repository: everything is local unless explicitly allowed.
+# Code-only tracking policy. Paths beginning with / are relative to repo root.
+# Ignore files by default; traverse folders to reach approved source paths.
 *
 !*/
-!.gitignore
+
+# Repository configuration and copyright.
+!/.gitignore
 !/.editorconfig
 !/.gitattributes
-!*.py
-!*.cpp
-!*.c
-!*.hpp
-!*.h
-!*.ts
-!*.tsx
-!*.js
-!*.css
-!*.html
-!*.sh
-!*.toml
-!Makefile
-!Dockerfile
-!LICENSE
+!/LICENSE
+
+# Backend source, reference implementation and build recipes.
+!/backend/**/*.py
+!/backend/src/*.cpp
+!/backend/include/*.hpp
+!/backend/pyrefly.toml
+!/backend/pyrightconfig.json
+!/backend/build/Makefile
+!/backend/build/jobscript.sh
+!/backend/build/launch_dir.py
+
+# Frontend source, dependency manifests and tooling configuration.
+!/frontend/.gitignore
+!/frontend/Dockerfile
+!/frontend/index.html
 !/frontend/package.json
 !/frontend/package-lock.json
 !/frontend/tsconfig.json
-!/backend/pyrightconfig.json
-!/backend/requirements.txt
-# App icons are text-based SVG source required by the interface.
+!/frontend/*.js
+!/frontend/*.ts
+!/frontend/src/**/*.ts
+!/frontend/src/**/*.tsx
+!/frontend/src/**/*.js
+!/frontend/src/**/*.css
 !/frontend/public/*.svg
-# Always exclude documents, historical runs and generated/vendor code.
+
+# Research tooling source only; results and manuscript assets remain local.
+!/benchmarks/**/*.py
+!/scripts/**/*.py
+!/tools/**/*.py
+
+# Existing local-only folders in this repository.
 /docs/
-/resource/
-/Analysis/
-/data/
+/archive/
 /configs/
+/data/
 /.vscode/
 /.cache/
 /.agents/
 /.codex/
 /backend/files/
-/backend/Analysis/**/*.ipynb
-/archive/
-/tools/visualization/lattice_plaquettes.svg
-**/__pycache__/
-**/node_modules/
-**/venv/
-**/.venv/
-**/dist/
-**/build/*.o
-**/build/*.exe
-**/build/*.dll
 /benchmarks/results/
+/frontend/src/assets/
+
+# Generated products, dependencies, environments and machine-local files.
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+dist-ssr/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+.env.*
+*.local
+*.py[cod]
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.tsbuildinfo
+*.log
+compile_commands.json
 
 # Documents and publication assets, at any depth.
 *.md
@@ -115,8 +143,5 @@
 [pP]resentations/
 [sS]lides/
 [nN]otes/
-# Dependency manifest is required to install the code.
+# Required dependency manifest: exception to the document *.txt rule.
 !/backend/requirements.txt
-
-# Machine-specific compilation databases stay local.
-compile_commands.json
