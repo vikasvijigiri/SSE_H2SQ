@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 import json
+import re
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,8 +14,11 @@ sys.path.insert(0, str(ROOT / "backend"))
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("identity", help="Benchmark job ID from the dashboard")
+    parser.add_argument("--name", help="Optional publication folder label (letters, digits, underscores and hyphens)")
     parser.add_argument("--api", default="http://127.0.0.1:8000/api/benchmarks")
     args = parser.parse_args()
+    if args.name and not re.fullmatch(r"[A-Za-z0-9_-]+", args.name):
+        raise SystemExit("Use letters, digits, underscores and hyphens for the folder label.")
     with urllib.request.urlopen(f"{args.api}/{args.identity}", timeout=30) as response:
         job = json.load(response)
     if job["status"] != "complete":
@@ -22,7 +26,7 @@ def main():
     from app.services.benchmark import csv_result, figure_result
     import matplotlib as mpl
     mpl.rcParams.update({"pdf.fonttype": 42, "ps.fonttype": 42, "svg.fonttype": "none", "font.family": "serif", "mathtext.fontset": "stix"})
-    folder = ROOT / "docs/manuscript/benchmark" / args.identity
+    folder = ROOT / "docs/manuscript/benchmark" / (args.name or args.identity)
     for name in ("figures", "tables", "metadata"):
         (folder / name).mkdir(parents=True, exist_ok=True)
     (folder / "tables/observables.csv").write_text(csv_result(job), encoding="utf-8")
