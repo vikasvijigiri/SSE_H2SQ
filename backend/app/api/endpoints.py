@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse
+from app.services.qmc_results import import_legacy, jackknife_summary, result_text
 from app.api.schemas import SimulationParams, SimulationResult
 from app.services.simulation import run_dummy_simulation
 
@@ -51,6 +53,7 @@ async def get_history():
             
         qmc_data = qmc_cache.get(key)
         ed_data = ed_cache.get(key)
+        import_legacy(key, qmc_data)
         
         ts_qmc = qmc_data.get("timestamp") if qmc_data else None
         ts_ed = ed_data.get("timestamp") if ed_data else None
@@ -61,6 +64,7 @@ async def get_history():
             "key": key,
             "ed": ed_data,
             "qmc": qmc_data,
+            "qmc_jackknife": jackknife_summary(key),
             "timestamp": ts,
         })
 
@@ -71,3 +75,11 @@ async def get_history():
     history_list = history_list[:5]
 
     return {"status": "success", "data": history_list}
+
+
+@router.get("/qmc-runs/{run_id}/result", response_class=PlainTextResponse)
+async def get_qmc_result(run_id: str):
+    text = result_text(run_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Raw output is unavailable for this run.")
+    return PlainTextResponse(text, headers={"Content-Disposition": f'inline; filename="SSE_data.txt"', "X-Content-Type-Options": "nosniff"})

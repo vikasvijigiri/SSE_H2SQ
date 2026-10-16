@@ -713,7 +713,7 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
         }
 
         // Immediately show new result at top, then refresh from backend
-        setResults(prev => [{ ed, qmc }, ...prev].slice(0, 5));
+        setResults(prev => [{ ...runData[0], ed, qmc }, ...prev].slice(0, 5));
         setSelectedIndex(0);
         // Sync with backend so spin configs + comparison table stay consistent
         await fetchHistory();
@@ -784,6 +784,7 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
     const item = results[selectedIndex];
     const ed  = item.ed;
     const qmc = item.qmc;
+    const averages = item.qmc_jackknife?.observables ?? {};
 
     // Guard: never compare ED and QMC from different parameter sets.
     // If both are present but don't match, show values for each column but
@@ -811,7 +812,7 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
         ? Math.max(0, 1 - Math.abs(qmcVal - edVal) / Math.abs(edVal)) * 100
         : null;
 
-      return { name: obs.name, edVal, qmcVal, delta, agreement, format: obs.format, matched };
+      return { name: obs.name, edVal, qmcVal, average: averages[obs.qmcKey], delta, agreement, format: obs.format, matched };
     });
   };
 
@@ -1253,12 +1254,23 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
                 }
                 return null;
               })()}
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-[10px] text-slate-400">
+                <span title="Equal weight per completed run with matching lattice, couplings, field and temperature. SE measures between-run variability; at least two runs are required.">
+                  Jackknife: {results[selectedIndex]?.qmc_jackknife?.n_runs ?? 0} matching runs &middot; between-run SE &middot; Delta compares current run to ED
+                </span>
+                {results[selectedIndex]?.qmc?.result_file_url ? (
+                  <a className="rounded-lg border border-purple-500/40 px-3 py-1.5 text-purple-300 hover:bg-purple-500/10 font-semibold"
+                    href={`${API_URL.replace(/\/api$/, '')}${results[selectedIndex].qmc.result_file_url}`}
+                    target="_blank" rel="noopener noreferrer">View QMC file &#8599;</a>
+                ) : <span>Raw file unavailable for older runs</span>}
+              </div>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800/60 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="py-2 px-2.5">Observable</th>
                     <th className={`py-2 px-2.5 ${results[selectedIndex]?.ed ? 'text-indigo-300/80' : 'text-slate-700'}`}>Exact ED</th>
-                    <th className={`py-2 px-2.5 ${results[selectedIndex]?.qmc ? 'text-purple-300/80' : 'text-slate-700'}`}>QMC SSE</th>
+                    <th className={`py-2 px-2.5 ${results[selectedIndex]?.qmc ? 'text-purple-300/80' : 'text-slate-700'}`}>QMC current run</th>
+                    <th className="py-2 px-2.5 text-emerald-300/80">QMC jackknife mean &plusmn; SE</th>
                     <th className="py-2 px-2.5">Δ</th>
                     <th className="py-2 px-2.5 text-right">Agreement</th>
                   </tr>
@@ -1271,6 +1283,9 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
                         <td className="py-1.5 px-2.5 font-semibold text-slate-300 font-sans text-[11px]">{row.name}</td>
                         <td className="py-1.5 px-2.5 text-indigo-400">{formatObsVal(row.edVal, row.format)}</td>
                         <td className="py-1.5 px-2.5 text-purple-400">{formatObsVal(row.qmcVal, row.format)}</td>
+                        <td className="py-1.5 px-2.5 text-emerald-400 whitespace-nowrap">
+                          {row.average ? <>{formatObsVal(row.average.mean, row.format)}<span className="text-emerald-400/60 text-[10px]"> &plusmn; {row.average.standard_error == null ? 'N/A' : formatObsVal(row.average.standard_error, row.format)}</span></> : '--'}
+                        </td>
                         <td className="py-1.5 px-2.5 text-slate-500 text-[10px]">{row.delta !== null ? formatScientific(row.delta, 4) : '--'}</td>
                         <td className={`py-1.5 px-2.5 text-right font-bold text-[11px] ${row.agreement !== null ? agreementColor : 'text-slate-600'}`}>
                           {row.agreement !== null ? `${row.agreement.toFixed(3)}%` : '--'}

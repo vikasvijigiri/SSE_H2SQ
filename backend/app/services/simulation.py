@@ -9,6 +9,7 @@ import tempfile
 import datetime
 import pandas as pd
 
+from app.services.qmc_results import save_run, import_legacy, jackknife_summary
 from app.api.schemas import SimulationParams
 
 # Get exact path of exact_diagonalzation_H2SQ.py
@@ -591,6 +592,9 @@ n_measure {params.n_measure}
             "checks_summary": checks_summary if checks_summary else None,
             "timestamp": datetime.datetime.now().isoformat()
         }]
+        if not getattr(params, "debug_mode", False):
+            with open(output_file_path, encoding="utf-8") as result_file:
+                mapped_data[0] = save_run(get_qmc_cache_key(params), mapped_data[0], result_file.read())
         return mapped_data
         
     finally:
@@ -629,6 +633,7 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
     qmc_cache_key = get_qmc_cache_key(qmc_params)
     qmc_cache = load_qmc_cache()
     qmc_record = qmc_cache.get(qmc_cache_key)
+    import_legacy(qmc_cache_key, qmc_record)
 
     # STRICT MATCHING: ED does not support J3.
     # If the physical parameters include J3 != 0, ED cannot represent this state.
@@ -705,10 +710,10 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
     ed_cache = load_ed_cache()
     qmc_cache = load_qmc_cache()
     ed_record = ed_cache.get(ed_cache_key)
-    if not debug_mode:
+    if not debug_mode and sim_type != "QMC":
         qmc_record = qmc_cache.get(qmc_cache_key)
 
-    results = [{"qmc": qmc_record, "ed": ed_record}]
+    results = [{"qmc": qmc_record, "ed": ed_record, "qmc_jackknife": jackknife_summary(qmc_cache_key) if not debug_mode else None}]
         
     # Stream final 100% progress and complete event
     if client_id and client_id in active_connections:
