@@ -19,7 +19,7 @@ def number(value):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('identity')
-    parser.add_argument('--name',default='ground-state-validation');args=parser.parse_args()
+    parser.add_argument('--name',default='ground-state-validation');parser.add_argument('--reuse-figures',action='store_true');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_-]+',args.name):raise SystemExit('Use a simple folder name.')
     with urllib.request.urlopen(f'http://127.0.0.1:8000/api/ground-validation/{args.identity}',timeout=60) as response:job=json.load(response)
     if job['status']!='complete':raise SystemExit('Complete the frozen study before exporting final evidence.')
@@ -43,15 +43,17 @@ def main():
         if histogram:choices += [('E',key) for key in ['state_infidelity','state_tvd','state_missing']]
         for key,quantity in choices:
             for form in ['pdf','svg','png']:
-                (folder/f'figures/{point["id"]}-{key}-{quantity}.{form}').write_bytes(figure_result(job,point['id'],key,quantity,form))
+                target=folder/f'figures/{point["id"]}-{key}-{quantity}.{form}'
+                if not args.reuse_figures or not target.is_file():target.write_bytes(figure_result(job,point['id'],key,quantity,form))
             panels+=1
         title=point['label'].replace('_',r'\_')
         figure_sections.append(r'\subsection{'+title+'}\n'+r'\noindent '+f'{p["Lx"]} by {p["Ly"]}; '+r'$J_1='+number(p['J1'])+r', J_2='+number(p['J2'])+r', h='+number(p['hx'])+r'$. Verdict: \textbf{'+point['verdict']+'}.\n')
-        for key in ['E','mx','stripe2','ct0']:
-            figure_sections.append(r'\includegraphics[width=.49\linewidth]{figures/'+point['id']+'-'+key+'-mean.pdf}\n')
+        assets=[point['id']+'-'+key+'-mean.pdf' for key in ['E','mx','stripe2','ct0']]
         if histogram:
-            for quantity in ['state_infidelity','state_tvd']:
-                figure_sections.append(r'\includegraphics[width=.49\linewidth]{figures/'+point['id']+'-E-'+quantity+'.pdf}\n')
+            assets += [point['id']+'-E-'+quantity+'.pdf' for quantity in ['state_infidelity','state_tvd']]
+        figure_sections.append(r'\par\smallskip'+'\n')
+        for i in range(0,len(assets),2):
+            figure_sections.append(r'\noindent '+r'\hfill'.join(r'\includegraphics[width=.48\linewidth]{figures/'+name+'}' for name in assets[i:i+2])+r'\par\smallskip'+'\n')
         figure_sections.append(r'\clearpage'+'\n')
         print(f'Exported {point["id"]}: {panels} panels',flush=True)
     with (folder/'tables/cases.csv').open('w',newline='',encoding='utf-8') as output:
@@ -66,9 +68,18 @@ def main():
     table=[r'\begin{longtable}{lrrrrrrl}',r'Case & $N$ & $J_1$ & $J_2$ & $h$ & $T/\beta$ & $F_{\rm QMC,0}$ & Verdict \\ \hline']
     for row in rows:table.append(' & '.join([row[0],str(row[2]*row[3]),*[number(row[i]) for i in [5,6,7,8,10]],row[9]])+r' \\')
     table.append(r'\end{longtable}');(folder/'tables/cases.tex').write_text('\n'.join(table),encoding='utf-8')
+    estimates=[r'\begin{longtable}{llrrl}',r'Case / method & Quantity & QMC $\pm$ SE & Ground / exact & Status \\ \hline\endhead']
+    for point in job['points']:
+        if not point['levels']:continue
+        for method,summary in point['levels'][-1]['methods'].items():
+            for key in PHYSICS_KEYS:
+                value=summary['observables'][key]
+                estimates.append(' & '.join([point['id']+'/'+method,key.replace('_',r'\_'),'$'+number(value['mean'])+r'\pm'+number(value['error'])+'$',number(value['ground_ed']),value['status']])+r' \\')
+    estimates.append(r'\end{longtable}');(folder/'tables/final-estimates.tex').write_text('\n'.join(estimates),encoding='utf-8')
     (folder/'sections/figures.tex').write_text(''.join(figure_sections),encoding='utf-8')
     (folder/'sections/methods.tex').write_text(r'''\section{Hamiltonian and ground-state target}
-The periodic even checkerboard lattice uses Pauli variables $\sigma_i^z=\pm1$ and black-plaquette order $(0,1,2,3)=(LL,UL,UR,LR)$:
+The periodic even checkerboard lattice uses Pauli variables $\sigma_i^z=\pm1$. The cyclic black-plaquette order is
+\[ (0,1,2,3)=(LL,UL,UR,LR). \]
 \begin{equation}
  H=-J_0\sum_p\sigma_{p0}\sigma_{p1}\sigma_{p2}\sigma_{p3}
  +J_1\sum_p(\sigma_{p0}\sigma_{p2}+\sigma_{p1}\sigma_{p3})
@@ -111,6 +122,7 @@ Ground projection with a symmetry-compatible trial can suppress irrelevant charg
     (folder/'main.tex').write_text(r'''\documentclass[11pt]{article}
 \usepackage[margin=22mm]{geometry}
 \usepackage{amsmath,amssymb,graphicx,longtable,booktabs,hyperref}
+\setlength{\emergencystretch}{2em}
 \title{Finite-lattice ground-state validation of checkerboard projector QMC}
 \author{Vikas Vijigiri}
 \date{\today}
@@ -120,7 +132,9 @@ Ground projection with a symmetry-compatible trial can suppress irrelevant charg
 \input{sections/results.tex}
 \input{sections/limitations.tex}
 \bibliographystyle{unsrt}\bibliography{bibliography/references}
-\clearpage\appendix\section{Representative plots for every retained case}
+\clearpage\appendix\section{Final estimates for every measured static quantity}
+\input{tables/final-estimates.tex}
+\clearpage\section{Representative plots for every retained case}
 All measured static quantities and precision diagnostics also have individual PDF, SVG and PNG assets in the figures folder. Exact references have zero sampling error; their numerical residuals are recorded in metadata.
 \input{sections/figures.tex}
 \end{document}

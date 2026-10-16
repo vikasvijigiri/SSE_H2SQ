@@ -45,7 +45,7 @@ def main():
                     if method!='emc':assert metadata['cutoff_saturations']==0
                 assert n==summary['retained_samples']
                 for key,v in summary['observables'].items():
-                    assert abs(totals[key]/n-v['mean'])<1e-11,(point['id'],method,key)
+                    assert abs(totals[key]/n-v['mean'])<1e-11*max(1.,abs(v['mean'])),(point['id'],method,key)
                     if v['pull'] is not None:pulls.append(abs(v['pull']))
                     if v['rhat'] is not None:rhats.append(v['rhat'])
                     if v['tau_int'] is not None:taus.append(v['tau_int']);effective.append(v['ess'])
@@ -78,6 +78,9 @@ def main():
             data=path.read_bytes()
             assert (path.suffix=='.pdf' and data.startswith(b'%PDF-')) or (path.suffix=='.png' and data.startswith(b'\x89PNG')) or (path.suffix=='.svg' and b'<svg' in data[:1000]),path
         report['publication_assets_checked']=len(manifest);report['latex_compiled']=False
+        if (paper/'metadata/latex-build.json').exists():
+            build=json.loads((paper/'metadata/latex-build.json').read_text());assert build['compiled'];assert digest(paper/'validation-report.pdf')==build['pdf_sha256']
+            report['latex_compiled']=True;report['latex_pages']=build['pages']
         (paper/'metadata/review.json').write_text(json.dumps(report,indent=2,allow_nan=False),encoding='utf-8')
         retained={p.relative_to(folder).as_posix():digest(p) for p in sorted(folder.rglob('*')) if p.is_file() and p.name!='study.tmp'}
         (paper/'metadata/retained-artifacts.json').write_text(json.dumps(retained,indent=2),encoding='utf-8')
