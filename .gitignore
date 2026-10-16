@@ -37,6 +37,7 @@
 # Research tooling source only; results and manuscript assets remain local.
 !/benchmarks/**/*.py
 !/scripts/**/*.py
+!/scripts/audit/*.cpp
 !/tools/**/*.py
 
 # Existing local-only folders in this repository.
