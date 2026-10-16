@@ -320,10 +320,14 @@ inline void dbg_print_vertex_list(
             std::cout << PL << "    site " << std::setw(3) << s
                       << ": " << AGY << "no operators on this site" << A0 << "\n";
         } else {
+            int fl = first_leg[s], ll = last_leg[s];
+            bool pbc_ok = (linked_leg[ll] == fl) && (linked_leg[fl] == ll);
             std::cout << PL << "    site " << std::setw(3) << s
-                      << ": first=leg" << std::setw(4) << first_leg[s]
-                      << "  last=leg" << std::setw(4)  << last_leg[s]
-                      << "  " << ABL << "(last<->first periodic)" << A0 << "\n";
+                      << ": first=leg" << std::setw(4) << fl
+                      << "  last=leg"  << std::setw(4) << ll
+                      << "  " << ABL << "linked[last]=" << linked_leg[ll]
+                      << " linked[first]=" << linked_leg[fl] << A0
+                      << "  PBC:" << ok_fail(pbc_ok) << "\n";
         }
     }
     std::cout << PL << "\n";
@@ -422,17 +426,25 @@ static inline void dbg_loop_cluster_end(int cid, int n_members) {
               << A0 << "\n";
 }
 
-static inline void dbg_loop_spin_section() {
+static inline void dbg_final_spins(const std::vector<int>& before,
+                                   const std::vector<int>& after) {
     std::cout << PB << "\n"
               << PB << "  " << ABLD << AW
-              << "-- t=0 boundary spin updates --" << A0 << "\n";
-}
-
-static inline void dbg_loop_spin_update(int site, int old_spin, int new_spin) {
-    if (old_spin == new_spin) return;  // unchanged — silent
-    std::cout << PB << "    site " << std::setw(3) << site << ": "
-              << spin_icon(old_spin) << " -> " << spin_icon(new_spin)
-              << "  " << AGN << ABLD << "flipped" << A0 << "\n";
+              << "-- Final spins after cluster flips --" << A0 << "\n";
+    int n_flip = 0;
+    for (int s = 0; s < (int)after.size(); ++s) {
+        bool changed = (before[s] != after[s]);
+        if (changed) ++n_flip;
+        std::cout << PB << "    site " << std::setw(3) << s << ":  "
+                  << spin_icon(before[s]) << " --> " << spin_icon(after[s])
+                  << "  " << (changed
+                      ? (std::string(ABLD) + AGN + "FLIPPED" + A0)
+                      : (std::string(AGY)  + "kept   " + A0))
+                  << "\n";
+    }
+    std::cout << PB << "  total: "
+              << AGN << n_flip << " site" << (n_flip != 1 ? "s" : "") << " flipped" << A0
+              << "  " << AGY << (int)after.size() - n_flip << " kept" << A0 << "\n";
 }
 
 static inline void dbg_loop_toggle_section() {
@@ -449,12 +461,11 @@ static inline void dbg_loop_op_toggle(int p, int site,
               << "  " << AMG << "(cluster-boundary crossing)" << A0 << "\n";
 }
 
-static inline void dbg_loop_footer(int n_clusters, int n_flipped, int n_spin_changes) {
+static inline void dbg_loop_footer(int n_clusters, int n_flipped) {
     std::cout << PB << "\n"
               << PB << "  Summary: clusters=" << AW << n_clusters << A0
               << "  flipped=" << AGN << n_flipped << A0
-              << "  kept=" << AGY << (n_clusters - n_flipped) << A0
-              << "  spin_changes=" << AYL << n_spin_changes << A0 << "\n";
+              << "  kept=" << AGY << (n_clusters - n_flipped) << A0 << "\n";
     section_ftr(PB, BGB);
     std::cout << "\n";
 }

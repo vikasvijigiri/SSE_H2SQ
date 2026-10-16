@@ -5,7 +5,12 @@ CXX := g++
 CXXFLAGS := -O3 -std=c++17 -Wall -pedantic-errors -g \
             -msse2 -march=native -funroll-loops -ffast-math \
             -fomit-frame-pointer -fstrict-aliasing
+ifeq ($(OS),Windows_NT)
 LDFLAGS := -static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic
+
+else
+LDFLAGS :=
+endif
 
 # ===============================
 # Source directory (unchanged)
@@ -30,12 +35,12 @@ all: $(TARGET)
 # Link
 # ===============================
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # ===============================
 # Compile EACH source separately
 # ===============================
-%.o: $(SDIR)/%.cpp
+%.o: $(SDIR)/%.cpp $(wildcard ../include/*.hpp)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ===============================
@@ -69,5 +74,16 @@ debug:
 verbose:
 	$(MAKE) clean
 	$(MAKE) CXXFLAGS="$(CXXFLAGS) -DVERBOSE"
+
+# ===============================
+# Debug binary — separate binary with SSE_DEBUG enabled
+# Does NOT overwrite sse_sim_test.exe.
+# Usage:  make debugbin   (from backend/build/)
+# ===============================
+DBG_TARGET := sse_sim_debug
+.PHONY: debugbin
+debugbin:
+	$(CXX) $(CXXFLAGS) -DSSE_DEBUG $(SRCS) $(LDFLAGS) -o $(DBG_TARGET)
+	@echo Debug binary built: $(DBG_TARGET)
 
 .PHONY: all clean

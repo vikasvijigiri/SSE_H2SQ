@@ -14,7 +14,7 @@ import math
 # Global settings
 # ======================================================
 
-TOP_DIR = Path.cwd()
+TOP_DIR = Path(__file__).resolve().parent
 
 # Lattice sizes
 L_LIST = [8, 12, 16, 20]
@@ -33,8 +33,8 @@ N_MEAS    = 300000
 
 
 # Runtime files
-JOBSCRIPT = Path("jobscript.sh")
-MAKEFILE  = Path("Makefile")
+JOBSCRIPT = TOP_DIR / "jobscript.sh"
+MAKEFILE  = TOP_DIR / "Makefile"
 
 TAN30 = math.tan(math.pi / 6.0)   # tan(30°)
 
@@ -117,7 +117,9 @@ for beta in BETA_LIST:
 
                     # Copy runtime files
                     shutil.copy(JOBSCRIPT, run_dir)
-                    shutil.copy(MAKEFILE, run_dir)
+                    (run_dir / "Makefile").write_text(
+                        MAKEFILE.read_text().replace("SDIR := ../src", "SDIR := ../../../../src")
+                    )
                     make_executable(run_dir / JOBSCRIPT.name)
 
 print("✔ SSE input files generated (J0 fixed, hx = T tan(30°))")

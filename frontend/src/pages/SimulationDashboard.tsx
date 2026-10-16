@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Play, Square, Sparkles, TableProperties, Grid3x3, Terminal, Copy, Check } from 'lucide-react';
+import { Play, Square, Sparkles, TableProperties, Grid3x3, Terminal, Copy, Check, Bug } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const hostname = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : '127.0.0.1';
@@ -921,6 +921,24 @@ export default function SimulationDashboard({ isServerReady = true }: { isServer
               </>
             )}
           </button>
+
+          {simType === 'QMC' && (
+            <button
+              onClick={() => {
+                setShowTerminal(true);
+                handleRun('QMC', { ...qmcParams, debug_mode: true, n_therm: 1, n_measure: 0 });
+              }}
+              disabled={!isServerReady}
+              className={`mt-1.5 w-full text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-2 transition-all border ${
+                !isServerReady
+                  ? 'border-slate-800 text-slate-600 cursor-not-allowed'
+                  : 'border-amber-500/40 text-amber-400 hover:border-amber-400 hover:bg-amber-500/10 active:scale-[0.98] cursor-pointer'
+              }`}
+            >
+              <Bug className="w-3 h-3" />
+              DEBUG RUN
+            </button>
+          )}
 
           {/* ── View toggle ── */}
           <div className="mt-3 pt-3 border-t border-slate-800/40 flex items-center justify-center gap-3">

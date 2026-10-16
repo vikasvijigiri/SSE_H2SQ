@@ -1,1 +1,35 @@
-/backend/venv/
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+# Python and tool caches
+__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.ruff_cache/
+# Build products
+*.o
+*.exe
+*.dll
+*.tsbuildinfo
+compile_commands.json
+node_modules/
+dist/
+# Local simulation output (inputs and historical results remain explicit)
+*.log
+/data/
+/benchmarks/results/
+/backend/files/*cache.json
+/backend/files/temp_runs/
+/backend/build/SSE_data.txt
+/backend/build/spin_configs.json
+# Manuscript build output
+*.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz

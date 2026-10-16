@@ -1,0 +1,477 @@
+[
+  {
+    "action": "remove",
+    "source": "backend/resource/compile.bat",
+    "sha256": "30b5fc6b5ce3cb3de57e2ccf292b3cef956459c9c7f39a4c998b87a58d9a310c",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/compile.ps1",
+    "sha256": "0eb8311b164a7b0700037fa41282b9b23a0a6d8ed334269a54be3a4d3d4e53f5",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/3D_lattice.pdf",
+    "sha256": "c67ba69901b9c5a3a805d2727f89dc8df55c3cfdcf589d5f0d75e26cbe0d5aca",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM1.pdf",
+    "sha256": "bda2d6dc4bda48bd6ab67429541e0eae666a0731c70e5b4db3230dde45699e15",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM2.pdf",
+    "sha256": "2e6a0c46a3c31c75b9f125a104be74ce1b40a75ad562e53da0623484cac09707",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM3.pdf",
+    "sha256": "3e320bd05ed81ec839c0a819d7e3b2f635b493fd77f1057a6b374f5110aaa905",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM_order_param.pdf",
+    "sha256": "26f35ba859cde9b6d9bc515caa4ad26e657a4699303c213340d3111d08c3bc75",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM_phase_diagram.pdf",
+    "sha256": "bff1bce074ef3f7e4a70978a8f7f6161e24d029bbaaca402ebee17ab5da6ed94",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM_phase_diagram.png",
+    "sha256": "6579618290aef2d6b658b5026344c0aa98d3a44cb24777ed82d09f7d79c62927",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/AFM_TF_0.5_0.03_0_8_16.pdf",
+    "sha256": "f3f3d9527231faf1d111b19ad3758ff73734296d6610698c5e233ea150e6ac28",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/all_T_0.5_0.05_0.03_16_1_8.pdf",
+    "sha256": "d7475d79cda914a6c5fd2886af06995b9d8b7cd7f89b8fada4287a5e2bfc4b8b",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/corr_plot_.pdf",
+    "sha256": "46712dbe718b235941e956bebda1a00c493a4edc95493bf6dc7d5a2c697443e9",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/density_plot.pdf",
+    "sha256": "f2ca6e381bc4eda251789054a8debbd04fc232e988b732c9eb3d2bf37fff40c3",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/DIS1.pdf",
+    "sha256": "ac2d01273d4c677f06f6a8c39a5851c483de0b4353c1d1bb322f4ee793479a3b",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/DIS2.pdf",
+    "sha256": "76e54a8ad2c62d4b5f2a2e4510bb953bbe941d05d63eecfa502b09ce9be8fc60",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/DIS3.pdf",
+    "sha256": "74c7c287657babd1f15a265d9693bdc28ae8cb97ef7203e21e46ec8615ed9110",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/Dis_order_param.pdf",
+    "sha256": "737d3e84b0e65fd11dda4772082299fe4abf6a62f0ea80f29a22f3b73a76795e",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM1.pdf",
+    "sha256": "750b1fe7f767cf72caa3fd5e83ec6b9d84c4d0378abb23b67f1270090b593393",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM2.pdf",
+    "sha256": "0f05734eeac8a32f4383a40b2cacc91eacf3702169dca980f01e60ec7dbcbac2",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM3.pdf",
+    "sha256": "f4d6f022ccee428fabd9ada2bddaea7032c339921d08e1d7b8735a9d80c15de5",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM_order_param.pdf",
+    "sha256": "fc6743a20af66d19fab64c60532567dcd04d62e721a68fad52b95f3348fb2d96",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM_phase_diagram.pdf",
+    "sha256": "4e6620754cdec1579171aac3c2e48030f5daa2423a3da1d8506d68a2993ffff6",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/FM_phase_diagram.png",
+    "sha256": "7692357d6d490dd84eb89b5313240aa65e1b07f2fbf5c933d1586452f8760f68",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/ice_param.pdf",
+    "sha256": "a2897e6430b9f6d61a70ebd676dbbdb6df18572dd1cd40287b14e3a5a3cd32d1",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/order_param.pdf",
+    "sha256": "930736ae7a55ae15e9b27e3a756fa485f321a57e25c28c418135dafee3249007",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/phase_diagram.pdf",
+    "sha256": "c78098f3c354c7d6dea1936e720c953e26256c68aa12d3ea9e6b9427744ddbe2",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/states.pdf",
+    "sha256": "9d31f7a56760ae4b746482da7a79399f6e93d5ce5a76c29fd1682cebbadb4e55",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/sw_1.pdf",
+    "sha256": "adadb67cfb4770547a7fbb25f3021a7244fe624b2decabc9541ae65ddef50487",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/sw_2.pdf",
+    "sha256": "847de1c95971d105c0ac42f6760a5a9e470eabceb4f8f512224d9a510b1d77b8",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/sw_3.pdf",
+    "sha256": "ebbdefe3f2ce8c87e21f8ed93f4ac6c9a37da7adbfc1ce5602bf7f4ca2170c51",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/sw_4.pdf",
+    "sha256": "7ba360868ba323f59d8592794655dc7fbd0165fcb690550a0aa57f077cbf95db",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/Figures/Values_T.pdf",
+    "sha256": "740c579acb1ce02c6d9d0aa37caa6993fae8ffb8ff20d317dd25d27ae89f8242",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/main.tex",
+    "sha256": "0f7f922048cec7486c0f2d5a194bf49deb8c4821ed6ce4a5622248a6f29eb448",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "remove",
+    "source": "backend/resource/manus-3rd-ref.bib",
+    "sha256": "a898cf29de7f353904c6a8f21b5d710bbfe0e1ba93591ecf0226882b2bf89953",
+    "reason": "Identical canonical manuscript file under resource/"
+  },
+  {
+    "action": "move",
+    "source": "resource",
+    "destination": "docs/manuscript"
+  },
+  {
+    "action": "move",
+    "source": "Analysis",
+    "destination": "tools/visualization"
+  },
+  {
+    "action": "move",
+    "source": "backend/libs",
+    "destination": "archive/legacy-kernels"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/node.sh",
+    "destination": "archive/hpc/node.sh"
+  },
+  {
+    "action": "move",
+    "source": "backend/test_ed_sim.py",
+    "destination": "scripts/diagnostics/test_ed_sim.py"
+  },
+  {
+    "action": "move",
+    "source": "backend/test_mx.py",
+    "destination": "scripts/diagnostics/test_mx.py"
+  },
+  {
+    "action": "move",
+    "source": "backend/test_run.py",
+    "destination": "scripts/diagnostics/test_run.py"
+  },
+  {
+    "action": "move",
+    "source": "backend/test_run_2.py",
+    "destination": "scripts/diagnostics/test_run_2.py"
+  },
+  {
+    "action": "move",
+    "source": "test_hx.in",
+    "destination": "configs/diagnostics/test_hx.in"
+  },
+  {
+    "action": "move",
+    "source": "test_hx2.in",
+    "destination": "configs/diagnostics/test_hx2.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/test_input.in",
+    "destination": "configs/diagnostics/test_input.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/input_params.in",
+    "destination": "configs/diagnostics/input_params.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/input_test_500k.in",
+    "destination": "configs/diagnostics/input_test_500k.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/quick_test.in",
+    "destination": "configs/diagnostics/quick_test.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/test.in",
+    "destination": "configs/diagnostics/test.in"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/test2.in",
+    "destination": "configs/diagnostics/test2.in"
+  },
+  {
+    "action": "move",
+    "source": "run_tests.py",
+    "destination": "benchmarks/compare_qmc_ed.py"
+  },
+  {
+    "action": "remove",
+    "source": "backend/build/main.o",
+    "sha256": "7111eaafb02055fa7a6477684919ad3e06b80efe22a1411e58fbdb31f84ad33d",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/build/observables.o",
+    "sha256": "f1cbfbb569cdd520d39bceb1d31f7e82e24f79ee983e85a6079bcb25b67e556d",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/build/updates.o",
+    "sha256": "0752db89b81acf022a90dafdd41cd203da4705767a573167d8cf570606cd4c0a",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/build/variables.o",
+    "sha256": "b815c394d9d25293331f065bd6ebbbb770e84240d422550204770599b02f894b",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/build/writeresults.o",
+    "sha256": "825ee7e7f93b4a86586e4c7f9905d5e48ea7efa09002ac7159e974eddbf1c3e3",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/main.o",
+    "sha256": "ea777b2a89b0b8dacf6c5ffbe5683ad72cf6496a10457097855071d9bb767f48",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/observables.o",
+    "sha256": "335358b1e49a2cd0657d2dbdf536928dd40745aabe93eaccce6d4ff30d613257",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/read_input.o",
+    "sha256": "dba057bfe9d7b2234c07c983f9f86092ffd2164c9fe48e6cbe501d6430d84c1d",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/updates.o",
+    "sha256": "442ccbd6d045ff7a92f1ce442d6f00c3ee292f5330d711e69820d47e36e69ef9",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/variables.o",
+    "sha256": "7561bd0f36440460d245e49c143d05dfceec458cac838efd4ee4b17bb17b7b0f",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/writeresults.o",
+    "sha256": "e3db3b5abdf0efbf396724d01e8c3ba83ed4ef6bdc60516a2e3803c1be55d558",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/main.o",
+    "sha256": "6cc0b7b844f444a8775f1ec4466061ea17b8c9cfb81428d1cbf7fdcf05cf193b",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/observables.o",
+    "sha256": "c05b778ef79d6cc0110d42cbf162b31bb5e7b38ac44ade81515d3ba952924b84",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/updates.o",
+    "sha256": "a671380634740ac61ac752bd4ab3781b6e988e651fb1e264e48ce306647b6e5f",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/variables.o",
+    "sha256": "54c5e4960647c95d6692159eba06f2dc1ce86cc6cb3b2635ae17cee639ed3153",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/writeresults.o",
+    "sha256": "87a05b1103b4780e4680f0825f54ff00b7bea13873074b23eea771437f6fe1c6",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "frontend/tsconfig.tsbuildinfo",
+    "sha256": "3d57d65c9b8fde781810a929850f27525b6632074e0d1ea151bbf84cecc8b255",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "updates.o",
+    "sha256": "e0c3a87af640bb37f6c3ac2e7de81025c38a171b5cbe81395e59ae42a968d881",
+    "reason": "Rebuildable compiler/interpreter artifact"
+  },
+  {
+    "action": "remove",
+    "source": "backend/main.exe",
+    "sha256": "f067463b13fc6d803c27c1c251b3c12c5ba33eeaec93f2e3b27c21168b2a92cc",
+    "reason": "Obsolete binary outside the canonical backend/build directory"
+  },
+  {
+    "action": "remove",
+    "source": "backend/sse_sim.exe",
+    "sha256": "832cd35c93db59d540cc5d35e11a77ce13ea5dea384795ab34972df23db3a502",
+    "reason": "Obsolete binary outside the canonical backend/build directory"
+  },
+  {
+    "action": "remove",
+    "source": "backend/sse_qmc.exe",
+    "sha256": "e996e1da64c86801a1789ac32203d0fd1323767b2353f65d5ae029691bcfd5fe",
+    "reason": "Obsolete binary outside the canonical backend/build directory"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/temp_runs/run_api_rfr5fcxa/sse_sim_test.exe",
+    "sha256": "8f8c4b74035eb65f4706c73ddc1c1f551dec70beb3141dc2f04232b521f48b60",
+    "reason": "Rebuildable sweep binary; source and input preserved"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/temp_runs/run_ij25ne_sj711gas/sse_sim_test.exe",
+    "sha256": "8f8c4b74035eb65f4706c73ddc1c1f551dec70beb3141dc2f04232b521f48b60",
+    "reason": "Rebuildable sweep binary; source and input preserved"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/main.exe",
+    "sha256": "0d1492ca2907da9ab53fb26972c145a185f4e3fd82029f9b0b7b3ea381a1fea8",
+    "reason": "Rebuildable sweep binary; source and input preserved"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_4.00/L_8/J1_0.00_J2_0.00_J3_0.00/main_bigstack.exe",
+    "sha256": "1465bdd372653f50f660ee08f59bffebce8098b741ed846a868b0eb02747bd2b",
+    "reason": "Rebuildable sweep binary; source and input preserved"
+  },
+  {
+    "action": "remove",
+    "source": "backend/files/beta_10.00/L_8/J1_0.00_J2_0.00_J3_0.00/main.exe",
+    "sha256": "767daf05115b08b7f406b22874c4ad6912f46b935376b006f45c48d40399d475",
+    "reason": "Rebuildable sweep binary; source and input preserved"
+  },
+  {
+    "action": "move",
+    "source": "server.log",
+    "destination": "data/legacy/root/server.log"
+  },
+  {
+    "action": "move",
+    "source": "server_err.log",
+    "destination": "data/legacy/root/server_err.log"
+  },
+  {
+    "action": "move",
+    "source": "backend/spin_configs.json",
+    "destination": "data/legacy/backend/spin_configs.json"
+  },
+  {
+    "action": "move",
+    "source": "backend/get_classical_energy.txt",
+    "destination": "data/legacy/backend/get_classical_energy.txt"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/SSE_data.txt",
+    "destination": "data/legacy/build/SSE_data.txt"
+  },
+  {
+    "action": "move",
+    "source": "backend/build/spin_configs.json",
+    "destination": "data/legacy/build/spin_configs.json"
+  }
+]

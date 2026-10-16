@@ -24,6 +24,7 @@ class SimulationParams(BaseModel):
     hx: float = 0.0
     n_therm: int = 500000
     n_measure: int = 500000
+    debug_mode: bool = False
 
 
 

@@ -168,6 +168,7 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
 #ifdef SSE_DEBUG
   static int dbg_pass = 0;
   ++dbg_pass;
+  constexpr int DBG_MAX_CLUSTERS = 2;
   dbg_loop_pass_hdr(dbg_pass, n_legs);
   dbg_print_vertex_list(
       vertex_op_index, linked_leg, vertex_partner, vertex_spin,
@@ -184,7 +185,7 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
   int n_clusters = 0;
 
 #ifdef SSE_DEBUG
-  int dbg_n_spin_changes = 0;
+  std::vector<int> dbg_spin_before; // saved just before spin update loop
 #endif
 
   for (int i = 0; i < n_legs; ++i) {
@@ -196,7 +197,8 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
 #ifdef SSE_DEBUG
     const double dbg_r = rng.uniform();
     const bool do_flip = (dbg_r < 0.5);
-    dbg_loop_cluster_start(cid, i, dbg_r, do_flip, leg_site);
+    if (cid < DBG_MAX_CLUSTERS)
+      dbg_loop_cluster_start(cid, i, dbg_r, do_flip, leg_site);
 #else
     const bool do_flip = (rng.uniform() < 0.5);
 #endif
@@ -215,7 +217,8 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
         m_cluster_id[v1] = cid;
         m_bfs_queue.push_back(v1);
 #ifdef SSE_DEBUG
-        dbg_loop_bfs_expand(u, v1, "linked ", leg_site);
+        if (cid < DBG_MAX_CLUSTERS)
+          dbg_loop_bfs_expand(u, v1, "linked ", leg_site);
 #endif
       }
       const int v2 = vertex_partner[u];
@@ -223,13 +226,19 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
         m_cluster_id[v2] = cid;
         m_bfs_queue.push_back(v2);
 #ifdef SSE_DEBUG
-        dbg_loop_bfs_expand(u, v2, "partner", leg_site);
+        if (cid < DBG_MAX_CLUSTERS)
+          dbg_loop_bfs_expand(u, v2, "partner", leg_site);
 #endif
       }
     }
 
 #ifdef SSE_DEBUG
-    dbg_loop_cluster_end(cid, (int)m_bfs_queue.size());
+    if (cid < DBG_MAX_CLUSTERS)
+      dbg_loop_cluster_end(cid, (int)m_bfs_queue.size());
+    else if (cid == DBG_MAX_CLUSTERS)
+      std::cout << PB << "  " << AGY << ADIM
+                << "  ... remaining clusters not shown (only first "
+                << DBG_MAX_CLUSTERS << " printed) ..." << A0 << "\n";
 #endif
   }
 
@@ -237,13 +246,10 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
   const int N = static_cast<int>(cfg.spins.spin.size());
 
 #ifdef SSE_DEBUG
-  dbg_loop_spin_section();
+  dbg_spin_before = cfg.spins.spin;
 #endif
 
   for (int s = 0; s < N; ++s) {
-#ifdef SSE_DEBUG
-    int dbg_old = cfg.spins.spin[s];
-#endif
     if (first_leg[s] != -1) {
       if (m_cluster_flipped[m_cluster_id[first_leg[s]]])
         cfg.spins.spin[s] *= -1;
@@ -251,11 +257,11 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
       if (rng.uniform() < 0.5)
         cfg.spins.spin[s] *= -1;
     }
-#ifdef SSE_DEBUG
-    if (dbg_old != cfg.spins.spin[s]) ++dbg_n_spin_changes;
-    dbg_loop_spin_update(s, dbg_old, cfg.spins.spin[s]);
-#endif
   }
+
+#ifdef SSE_DEBUG
+  dbg_final_spins(dbg_spin_before, cfg.spins.spin);
+#endif
 
   // --- 3. Toggle TransverseX operators that straddle a cluster boundary ---
   // vertex_base_vec[vp] pre-computed in build_vertex_list: no base-tracking
@@ -297,7 +303,7 @@ void SSEUpdates::loop_cluster_update(SSEConfig &cfg, const Parameters &/*prm*/,
   {
     int dbg_n_flipped = 0;
     for (bool f : m_cluster_flipped) if (f) ++dbg_n_flipped;
-    dbg_loop_footer(n_clusters, dbg_n_flipped, dbg_n_spin_changes);
+    dbg_loop_footer(n_clusters, dbg_n_flipped);
   }
 #endif
 

@@ -11,5 +11,5 @@ cat $PBS_NODEFILE > pbs
 
 ##g++ -O3 -std=c++17 -Wall -pedantic-errors -g -msse2 -march=native -funroll-loops -ffast-math -fomit-frame-pointer -fstrict-aliasing -o ./main -ggdb ./*.cpp  
 make
-time ./main  # Run in background, redirect output to log file
+time ./sse_sim_test input_params.in  # Run in background, redirect output to log file
 # End of jobscript.sh

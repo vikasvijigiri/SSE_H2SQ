@@ -296,7 +296,12 @@ async def run_ed_simulation(params: SimulationParams):
 async def run_qmc_simulation(params: SimulationParams, client_id: Optional[str]):
     """Runs the compiled QMC C++ simulation executable"""
     build_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "build"))
-    exe_name = "sse_sim_test.exe" if os.name == "nt" else "sse_sim_test"
+    debug_mode = getattr(params, 'debug_mode', False)
+    if debug_mode:
+        exe_name = "sse_sim_debug.exe" if os.name == "nt" else "sse_sim_debug"
+        params = params.model_copy(update={"n_therm": 1, "n_measure": 0})
+    else:
+        exe_name = "sse_sim_test.exe" if os.name == "nt" else "sse_sim_test"
     exe_path = os.path.join(build_dir, exe_name)
 
     loop = asyncio.get_running_loop()
@@ -319,8 +324,9 @@ async def run_qmc_simulation(params: SimulationParams, client_id: Optional[str])
         await _ws_send({"type": "time_estimate", "phase": "compile", "eta": 60.0})
         try:
             def _run_make():
+                make_target = "debugbin" if debug_mode else "all"
                 return subprocess.run(
-                    ["make"], cwd=build_dir, capture_output=True, timeout=300
+                    ["make", make_target], cwd=build_dir, capture_output=True, timeout=300
                 )
             result = await loop.run_in_executor(None, _run_make)
             if result.returncode != 0:
@@ -606,6 +612,8 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
         qmc_params = params
         ed_params = get_equivalent_ed_params(params)
 
+    debug_mode = sim_type == "QMC" and getattr(qmc_params, 'debug_mode', False)
+
     # Ensure ONLY the primary simulation reports progress to the UI
     ed_client_id = client_id if sim_type == "ED" else None
     qmc_client_id = client_id if sim_type == "QMC" else None
@@ -637,7 +645,7 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
     
     spins_ed = ed_params.Lx * ed_params.Ly * ed_params.Nl
     
-    if not ed_record and abs(qmc_params.J3) <= 1e-6:
+    if not ed_record and abs(qmc_params.J3) <= 1e-6 and not debug_mode:
         if sim_type == "ED" and spins_ed <= 16:
             run_ed_task = asyncio.create_task(run_ed_simulation(ed_params))
         elif sim_type == "QMC" and spins_ed <= 16:
@@ -665,11 +673,12 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
                 save_ed_cache(c)
             elif sim_type == "QMC" and res:
                 qmc_record = res[-1]
-                import datetime
-                qmc_record["timestamp"] = datetime.datetime.now().isoformat()
-                c = load_qmc_cache()
-                c[qmc_cache_key] = qmc_record
-                save_qmc_cache(c)
+                if not debug_mode:
+                    import datetime
+                    qmc_record["timestamp"] = datetime.datetime.now().isoformat()
+                    c = load_qmc_cache()
+                    c[qmc_cache_key] = qmc_record
+                    save_qmc_cache(c)
         except Exception as e:
             raise e
 
@@ -696,7 +705,8 @@ async def run_dummy_simulation(params: SimulationParams, sim_type: str):
     ed_cache = load_ed_cache()
     qmc_cache = load_qmc_cache()
     ed_record = ed_cache.get(ed_cache_key)
-    qmc_record = qmc_cache.get(qmc_cache_key)
+    if not debug_mode:
+        qmc_record = qmc_cache.get(qmc_cache_key)
 
     results = [{"qmc": qmc_record, "ed": ed_record}]
         
