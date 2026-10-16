@@ -3,9 +3,10 @@
 # ===============================
 CXX := g++
 CXXFLAGS := -O3 -std=c++17 -Wall -pedantic-errors -g \
-            -msse2 -march=native -funroll-loops -ffast-math \
+            -msse2 -march=native -funroll-loops \
             -fomit-frame-pointer -fstrict-aliasing
 ifeq ($(OS),Windows_NT)
+EXE_EXT := .exe
 LDFLAGS := -static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic
 
 else
@@ -23,7 +24,7 @@ SRCS := $(wildcard $(SDIR)/*.cpp)
 # ===============================
 OBJS := $(notdir $(SRCS:.cpp=.o))
 
-TARGET := sse_sim_test
+TARGET := sse_sim_test$(EXE_EXT)
 
 # ===============================
 # Default target
@@ -49,7 +50,7 @@ $(TARGET): $(OBJS)
 clean:
 ifeq ($(OS),Windows_NT)
 	@cmd /c "del /Q *.o 2>NUL"
-	@cmd /c "del /Q $(TARGET).exe 2>NUL"
+	@cmd /c "del /Q $(TARGET) 2>NUL"
 else
 	@rm -f *.o $(TARGET)
 endif
@@ -80,10 +81,17 @@ verbose:
 # Does NOT overwrite sse_sim_test.exe.
 # Usage:  make debugbin   (from backend/build/)
 # ===============================
-DBG_TARGET := sse_sim_debug
+DBG_TARGET := sse_sim_debug$(EXE_EXT)
 .PHONY: debugbin
-debugbin:
+debugbin: $(DBG_TARGET)
+
+$(DBG_TARGET): $(SRCS) $(wildcard ../include/*.hpp)
 	$(CXX) $(CXXFLAGS) -DSSE_DEBUG $(SRCS) $(LDFLAGS) -o $(DBG_TARGET)
 	@echo Debug binary built: $(DBG_TARGET)
 
 .PHONY: all clean
+
+.PHONY: benchmark
+benchmark: sse_benchmark$(EXE_EXT)
+sse_benchmark$(EXE_EXT): ../benchmarks/runner.cpp $(filter-out ../src/main.cpp,$(SRCS)) $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/runner.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(LDFLAGS) -o $@

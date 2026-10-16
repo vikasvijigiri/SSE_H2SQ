@@ -26,7 +26,7 @@ URLS = {"backend": "http://127.0.0.1:8000/", "frontend": "http://127.0.0.1:5173/
 def source_version():
     digest = hashlib.sha256()
     paths = [Path(__file__).resolve(), ROOT / "backend/build/Makefile", ROOT / "backend/requirements.txt", ROOT / "frontend/package-lock.json"]
-    for folder in ("backend/src", "backend/include", "backend/app", "frontend/src"):
+    for folder in ("backend/src", "backend/include", "backend/benchmarks", "backend/app", "frontend/src"):
         paths.extend(p for p in (ROOT / folder).rglob("*") if p.is_file() and p.suffix in {".py", ".cpp", ".hpp", ".ts", ".tsx", ".css"})
     paths.extend(p for p in (ROOT / "frontend").iterdir() if p.suffix in {".json", ".js", ".ts", ".html"})
     for path in sorted(set(paths)):
@@ -90,7 +90,7 @@ def prepare():
         else:
             run([npm, "ci"], ROOT / "frontend")
         stamp.write_bytes(lock.read_bytes())
-    run(["make", "-C", ROOT / "backend/build", "all"])
+    run(["make", "-C", ROOT / "backend/build", "all", "benchmark"])
     run(["make", "-C", ROOT / "backend/build", "debugbin"])
 
 
@@ -114,8 +114,31 @@ def worker(token):
         temporary = STATE.with_suffix(".tmp")
         temporary.write_text(json.dumps(state))
         temporary.replace(STATE)
-        while not stop_file.exists() and all(p.poll() is None for p in processes):
-            heartbeat.touch()
+        restarts = {name: 0 for name in commands}
+        while not stop_file.exists():
+            for index, (name, command) in enumerate(commands.items()):
+                code = processes[index].poll()
+                if code is not None:
+                    restarts[name] += 1
+                    print(f"{name} exited with code {code}; restarting (attempt {restarts[name]}).", flush=True)
+                    time.sleep(min(10, .5 * 2**min(restarts[name]-1, 5)))
+                    if stop_file.exists():
+                        break
+                    processes[index] = subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), stdout=logs[index], stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                    state["children"] = [process.pid for process in processes]
+                    for attempt in range(20):
+                        try:
+                            temporary.write_text(json.dumps(state))
+                            temporary.replace(STATE)
+                            break
+                        except PermissionError:
+                            if attempt == 19:
+                                raise
+                            time.sleep(.05)
+            try:
+                heartbeat.touch()
+            except PermissionError:
+                pass  # A transient Windows scanner lock must not stop services.
             time.sleep(0.5)
     finally:
         for process in processes:

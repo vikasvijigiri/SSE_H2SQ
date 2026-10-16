@@ -3,14 +3,110 @@ from fastapi.responses import PlainTextResponse
 from app.services.qmc_results import import_legacy, jackknife_summary, result_text
 from app.api.schemas import SimulationParams, SimulationResult
 from app.services.simulation import run_dummy_simulation
+from app.services import benchmark
+from fastapi.responses import Response, FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
+import json
+import asyncio
+
+_figure_lock = asyncio.Lock()
 
 
 router = APIRouter()
 
 
+@router.get("/benchmarks")
+async def benchmarks():
+    return await run_in_threadpool(benchmark.list_jobs)
+
+
+@router.post("/benchmarks", status_code=202)
+async def start_benchmark(request: benchmark.BenchmarkRequest):
+    try:
+        return await benchmark.start_job(request)
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.post("/benchmarks/compare", status_code=201)
+async def compare_benchmarks(identities: list[str]):
+    try:
+        return JSONResponse(await run_in_threadpool(benchmark.combine_jobs, identities), status_code=201)
+    except FileNotFoundError as error:
+        raise HTTPException(404, "Source experiment not found") from error
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.get("/benchmarks/{identity}")
+async def benchmark_result(identity: str):
+    # Files already contain JSON-native values. Bypass FastAPI's recursive
+    # encoder for large multi-schedule ACF payloads polled by the dashboard.
+    return JSONResponse(await _benchmark_data(identity))
+
+
+async def _benchmark_data(identity: str):
+    try:
+        return await run_in_threadpool(benchmark.get_job, identity)
+    except FileNotFoundError as error:
+        raise HTTPException(404, "Benchmark not found") from error
+
+
+@router.post("/benchmarks/{identity}/cancel")
+async def cancel_benchmark(identity: str):
+    return {"cancel_requested": benchmark.cancel_job(identity)}
+
+
+@router.post("/benchmarks/{identity}/resume", status_code=202)
+async def resume_benchmark(identity: str):
+    try:
+        return await benchmark.resume_job(identity)
+    except FileNotFoundError as error:
+        raise HTTPException(404, "Benchmark not found") from error
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.get("/benchmarks/{identity}/export")
+async def export_benchmark(identity: str, format: str = "csv", axis: str = "beta", observable: str = "E", quantity: str = "mean"):
+    job = await _benchmark_data(identity)
+    if format == "csv":
+        content, media = benchmark.csv_result(job), "text/csv"
+    elif format == "json":
+        content, media = json.dumps(job, indent=2, allow_nan=False), "application/json"
+    elif format in {"pdf", "svg", "png"} and axis in job["request"]["axes"] and observable in benchmark.OBSERVABLES and quantity in {"mean", "difference", "tau_int", "ess_per_second"}:
+        async with _figure_lock:
+            content = await run_in_threadpool(benchmark.figure_result, job, axis, observable, format, quantity)
+        media = {"pdf": "application/pdf", "svg": "image/svg+xml", "png": "image/png"}[format]
+    else:
+        raise HTTPException(422, "Choose csv, json, pdf, svg or png and a valid axis/observable")
+    return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="benchmark-{identity[:8]}-{axis}-{observable}-{quantity}.{format}"'})
+
+
+@router.get("/benchmarks/{identity}/traces/{point_id}/{method}/{chain}")
+async def benchmark_trace(identity: str, point_id: str, method: str, chain: int):
+    job = await _benchmark_data(identity)
+    if method not in benchmark.METHODS or not 0 <= chain < job["request"]["chains"] or point_id not in {p["point_id"] for p in job["points"]}:
+        raise HTTPException(404, "Trace not found")
+    summary = next(p for p in job["points"] if p["point_id"] == point_id)["methods"].get(method, {})
+    source_identity = summary.get("source_experiment", identity)
+    source_point = summary.get("source_point", point_id)
+    if source_identity != identity:
+        source = await _benchmark_data(source_identity)
+        if source_point not in {p["point_id"] for p in source["points"]}:
+            raise HTTPException(404, "Source trace not found")
+    path = benchmark.STORE / source_identity / source_point / method / str(chain) / "trace.npz"
+    if not path.is_file():
+        raise HTTPException(404, "This trace is not ready yet")
+    return FileResponse(path, filename=f"qmc-{point_id}-{method}-chain{chain}.npz")
+
+
 @router.post("/run-ed", response_model=SimulationResult)
 async def run_ed(params: SimulationParams):
-    result_data = await run_dummy_simulation(params, "ED")
+    try:
+        result_data = await run_dummy_simulation(params, "ED")
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     return SimulationResult(
         status="success",
         message="ED Simulation completed",
@@ -20,7 +116,10 @@ async def run_ed(params: SimulationParams):
 
 @router.post("/run-qmc", response_model=SimulationResult)
 async def run_qmc(params: SimulationParams):
-    result_data = await run_dummy_simulation(params, "QMC")
+    try:
+        result_data = await run_dummy_simulation(params, "QMC")
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     return SimulationResult(
         status="success",
         message="QMC Simulation completed",

@@ -9,8 +9,14 @@
 // ======================================================
 
 class SSEUpdates {
+    friend struct SSEKernelContract;
 public:
     SSEUpdates() = default;
+    bool spatial_premarking = true;
+    bool canonical_enabled = false;
+    double diagonal_seconds = 0, cluster_seconds = 0, gauge_seconds = 0, canonical_seconds = 0;
+    long long canonical_attempts = 0, canonical_accepted = 0;
+    void canonical_update(SSEConfig&, const Parameters&, const Geometry&, RNG&);
 
     // --------------------------------------------------
     // Top-level Monte Carlo sweep
@@ -46,8 +52,8 @@ public:
     //                   Each pair forms an independent bond in the cluster
     //                   graph — the two bonds CAN end up in different
     //                   clusters.
-    //   J1 plaquette  : fixed pairing (0,2) & (1,3), consistent with the
-    //                   J1 = σ0σ2 + σ1σ3 structure.
+    //   J1 bond       : independent two-site operators for (0,2) and (1,3).
+    //                   Together these represent J1 = σ0σ2 + σ1σ3 structure.
     //   J2 / J3 bond  : both sites in the pair are bonded (flip together).
     //   hx (transv.)  : no internal bond; instead, when a cluster boundary
     //                   straddles an hx vertex the operator toggles between
@@ -68,7 +74,7 @@ public:
                      const Geometry& geom,
                      RNG& rng);
 
-    // Gauge-sector update: flip entire rows / columns to restore ergodicity.
+    // Supplementary pure-J0 row/column moves; these alone do not span all sectors.
     // Only active for J0-only model (J1=J2=J3=hx=0).
     void gauge_update(SSEConfig& cfg,
                       const Parameters& prm,

@@ -8,30 +8,30 @@
 #include <cstdlib>
 #include <iostream>
 #include <iterator>
+#include <stdexcept>
 
 // ======================================================
 // Top-level sweep
 // ======================================================
 void SSEUpdates::sweep(SSEConfig &cfg, const Parameters &prm,
                        const Geometry &geom, RNG &rng) {
+  auto start = std::chrono::steady_clock::now();
   diagonal_update(cfg, prm, geom, rng);
-
+  auto diagonal_end = std::chrono::steady_clock::now();
 #ifdef SSE_DEBUG
   dbg_print_op_string(cfg, prm, geom);
 #endif
-
-  for (int i = 0; i < 2; ++i)
-      loop_cluster_update(cfg, prm, geom, rng);
-
-  // Gauge-sector update restores ergodicity: the BFS cluster collapses all
-  // sites into one giant cluster (they're connected through shared plaquette
-  // vertices), so the cluster update alone can only perform a global Z2 flip.
-  // Row/column flips can change topological sector (e.g. uniform -> stripe)
-  // while always preserving every J0 plaquette constraint.
+  for (int i = 0; i < 2; ++i) loop_cluster_update(cfg, prm, geom, rng);
+  auto cluster_end = std::chrono::steady_clock::now();
   gauge_update(cfg, prm, geom, rng);
-
-  if (use_slmc)
-    slmc_update(cfg, prm, geom, rng);
+  auto gauge_end = std::chrono::steady_clock::now();
+  if (canonical_enabled) canonical_update(cfg, prm, geom, rng);
+  auto end = std::chrono::steady_clock::now();
+  diagonal_seconds += std::chrono::duration<double>(diagonal_end-start).count();
+  cluster_seconds += std::chrono::duration<double>(cluster_end-diagonal_end).count();
+  gauge_seconds += std::chrono::duration<double>(gauge_end-cluster_end).count();
+  canonical_seconds += std::chrono::duration<double>(end-gauge_end).count();
+  if (use_slmc) slmc_update(cfg, prm, geom, rng);
 }
 
 // ======================================================
@@ -45,6 +45,7 @@ void SSEUpdates::diagonal_update(SSEConfig &cfg, const Parameters &prm,
   std::fill(std::begin(m_n_diag_by_sub), std::end(m_n_diag_by_sub), 0);
 
   auto add_type = [&](OpSubtype sub, int nd) {
+    if (nd <= 0) return;
     m_active_subtypes.push_back(sub);
     m_n_diags.push_back(nd);
     m_n_diag_by_sub[static_cast<int>(sub)] = nd;
@@ -55,7 +56,7 @@ void SSEUpdates::diagonal_update(SSEConfig &cfg, const Parameters &prm,
              static_cast<int>(geom.blackPlaquettes.size()));
   if (prm.J1 != 0.0)
     add_type(OpSubtype::J1_Plaquette,
-             static_cast<int>(geom.blackPlaquettes.size()));
+             2 * static_cast<int>(geom.blackPlaquettes.size()));
   if (prm.J2 != 0.0)
     add_type(OpSubtype::J2_Dipole, static_cast<int>(geom.j2bonds.size()));
   if (prm.J3 != 0.0)
@@ -123,14 +124,14 @@ double SSEUpdates::diagonal_weight(int subtype, int index, const SSEConfig &cfg,
     int prod = 1;
     for (int s : p.sites)
       prod *= cfg.spins.spin[s];
-    return std::abs(prod + 1) * std::abs(prm.J0);
+    return std::abs(prm.J0) + prm.J0 * prod;
   }
 
   case OpSubtype::J1_Plaquette: {
-    const auto &p = geom.blackPlaquettes[index];
-    int prod_sum = cfg.spins.spin[p.sites[0]] * cfg.spins.spin[p.sites[2]] +
-                   cfg.spins.spin[p.sites[1]] * cfg.spins.spin[p.sites[3]];
-    return (prod_sum == 2 ? 4.0 * std::abs(prm.J1) : 0.0);
+    const auto &p = geom.blackPlaquettes[index / 2];
+    int a = (index % 2 == 0) ? 0 : 1;
+    int b = a + 2;
+    return std::abs(prm.J1) - prm.J1 * cfg.spins.spin[p.sites[a]] * cfg.spins.spin[p.sites[b]];
   }
 
   case OpSubtype::J2_Dipole: {
@@ -142,9 +143,7 @@ double SSEUpdates::diagonal_weight(int subtype, int index, const SSEConfig &cfg,
 
   case OpSubtype::J3_Inter: {
     const auto &bond = geom.j3bonds[index];
-    return (cfg.spins.spin[bond[0]] * cfg.spins.spin[bond[1]] + 1 == 0)
-               ? 2.0 * std::abs(prm.J3)
-               : 0.0;
+    return std::abs(prm.J3) - prm.J3 * cfg.spins.spin[bond[0]] * cfg.spins.spin[bond[1]];
   }
 
   case OpSubtype::TransverseX_diag:
@@ -345,6 +344,8 @@ void SSEUpdates::build_vertex_list(SSEConfig &cfg, const Geometry &geom,
   first_leg.assign(N, -1);
 
   vertex_base_vec.reserve(vertex_op_index.size());
+  std::vector<int> spatial_motifs(geom.blackPlaquettes.size());
+  for (auto& motif : spatial_motifs) motif = int(rng.uniform() * 3.0);
 
   std::vector<int> spin = cfg.spins.spin;
 
@@ -377,16 +378,14 @@ void SSEUpdates::build_vertex_list(SSEConfig &cfg, const Geometry &geom,
       sites_buf[3] = plaq.sites[3];
       n_sites = 4;
       n_op_legs = 8;
-      decomp_type = static_cast<int>(rng.uniform() * 3.0);
+      decomp_type = spatial_premarking ? spatial_motifs[op.index] : int(rng.uniform() * 3.0);
     } else if (op.subtype == OpSubtype::J1_Plaquette) {
-      const auto &plaq = geom.blackPlaquettes[op.index];
-      sites_buf[0] = plaq.sites[0];
-      sites_buf[1] = plaq.sites[1];
-      sites_buf[2] = plaq.sites[2];
-      sites_buf[3] = plaq.sites[3];
-      n_sites = 4;
-      n_op_legs = 8;
-      decomp_type = 1;
+      const auto &plaq = geom.blackPlaquettes[op.index / 2];
+      int a = (op.index % 2 == 0) ? 0 : 1;
+      sites_buf[0] = plaq.sites[a];
+      sites_buf[1] = plaq.sites[a + 2];
+      n_sites = 2;
+      n_op_legs = 4;
     } else if (op.subtype == OpSubtype::J2_Dipole) {
       const auto &bond = geom.j2bonds[op.index];
       sites_buf[0] = bond.s1;
@@ -505,8 +504,7 @@ void SSEUpdates::build_vertex_list(SSEConfig &cfg, const Geometry &geom,
           set_pair_cycle(base + 2 * p2A, base + 2 * p2B);
         } else if (op.subtype == OpSubtype::J1_Plaquette) {
           // Fixed pairing: sites (0,2) and (1,3)
-          set_pair_cycle(base + 0, base + 4); // 2*0, 2*2
-          set_pair_cycle(base + 2, base + 6); // 2*1, 2*3
+          set_pair_cycle(base, base + 2);
         } else {
           // J2/J3: two-site bond — pair sites 0 and 1
           set_pair_cycle(base + 0, base + 2);
@@ -610,6 +608,7 @@ void SSEUpdates::slmc_update(SSEConfig &cfg, const Parameters & /*prm*/,
                              const Geometry & /*geom*/, RNG &rng) {
   (void)cfg;
   (void)rng;
+  throw std::logic_error("SLMC is not implemented; use the validated SSE baseline.");
 }
 
 // ======================================================
@@ -620,8 +619,8 @@ void SSEUpdates::slmc_update(SSEConfig &cfg, const Parameters & /*prm*/,
 // each come in pairs within that plaquette). Flipping both → prod unchanged.
 // Same argument holds for column flips.  Both moves always satisfy detailed
 // balance (w_new = w_old) so they are accepted unconditionally.
-// This restores ergodicity that the BFS cluster update loses: at large β the
-// cluster collapses to one giant cluster, allowing only the global Z2 flip.
+// These are supplementary pure-J0 sector moves. Row/column flips alone do
+// not connect the complete ground-state manifold.
 void SSEUpdates::gauge_update(SSEConfig &cfg, const Parameters &prm,
                               const Geometry &/*geom*/, RNG &rng) {
   // Only valid when J0 is the only interaction. J1 plaquette weights use
@@ -651,3 +650,31 @@ void SSEUpdates::gauge_update(SSEConfig &cfg, const Parameters &prm,
   }
 }
 
+
+// Symmetric whole-worldline proposal. Transverse-X events commute with the
+// boundary spin inversion; only diagonal matrix elements change. Zero weights
+// reject the move. The ratio uses every affected propagated vertex.
+void SSEUpdates::canonical_update(SSEConfig& cfg, const Parameters& prm, const Geometry& geom, RNG& rng) {
+  ++canonical_attempts;
+  int site = int(rng.uniform() * prm.Ns);
+  SSEConfig old_state, new_state;
+  old_state.spins = cfg.spins;
+  new_state.spins = cfg.spins;
+  new_state.spins.spin[site] *= -1;
+  double log_ratio = 0.0;
+  for (const auto& op : cfg.op_string) {
+    if (op.type == OpType::OffDiagonal) {
+      old_state.spins.spin[op.index] *= -1;
+      new_state.spins.spin[op.index] *= -1;
+    } else if (op.type == OpType::Diagonal) {
+      double before = diagonal_weight(int(op.subtype),op.index,old_state,prm,geom);
+      double after = diagonal_weight(int(op.subtype),op.index,new_state,prm,geom);
+      if (after <= 0 || before <= 0) return;
+      log_ratio += std::log(after/before);
+    }
+  }
+  if (std::log(std::max(rng.uniform(),1e-300)) < std::min(0.0,log_ratio)) {
+    cfg.spins.spin[site] *= -1;
+    ++canonical_accepted;
+  }
+}

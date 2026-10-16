@@ -1,10 +1,15 @@
 """Reproducible audit of geometry, exact classical traces, and QMC mixing."""
 from pathlib import Path
+import importlib.util
 import sys, json, subprocess, itertools, time
 import numpy as np
 ROOT=Path(__file__).resolve().parents[2]
-sys.path.insert(0,str(ROOT/'backend/Analysis/ED_analysis'))
-import exact_diagonalzation_H2SQ as ed
+from build_probes import prepare_baseline
+prepare_baseline()
+_spec = importlib.util.spec_from_file_location("historical_ed", ROOT / '.cache/physics-audit/historical-baseline/Analysis/ED_analysis/exact_diagonalzation_H2SQ.py')
+ed = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = ed
+_spec.loader.exec_module(ed)
 OUT=ROOT/'.cache/physics-audit'
 PROBE=OUT/'sse_probe.exe'
 

@@ -138,9 +138,8 @@ private:
     std::uniform_real_distribution<double> dist;
 
 public:
-    RNG()
-    : gen(std::chrono::high_resolution_clock::now()
-              .time_since_epoch().count()),
+    explicit RNG(unsigned long long seed = std::chrono::high_resolution_clock::now().time_since_epoch().count())
+    : gen(seed),
       dist(0.0, 1.0) {}
 
     inline double uniform() { return dist(gen); }
