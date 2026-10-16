@@ -47,7 +47,7 @@ function ScientificPanel({ pointRows, job, axis, observable, quantity = 'mean' }
         {Object.keys(names).map(method => <Line key={method} dataKey={method} name={names[method]} stroke={colors[method]} strokeWidth={1.5} dot={{ r: 3.5 }} isAnimationActive={false} connectNulls={false}>{quantity !== 'ess_per_second' && <ErrorBar dataKey={`${method}_error`} width={5} strokeWidth={1.4} />}</Line>)}
       </ComposedChart>
     </ResponsiveContainer>
-    <p className="text-xs text-slate-500 font-sans">{ylabel} · {['mean', 'difference'].includes(quantity) ? 'QMC bars: 1 SE. ED sampling error: zero. Missing QMC bars require review.' : quantity === 'tau_int' ? 'τint = ½ + Σρ(t). Uncertainty is an asymptotic estimate.' : 'Uses summed chain wall time including thermalization/I/O. Compare validated points; unseen sectors can give misleadingly short ?.'}</p>
+    <p className="text-xs text-slate-500 font-sans">{ylabel} · {['mean', 'difference'].includes(quantity) ? 'QMC bars: 1 SE. ED sampling error: zero. Missing QMC bars require review.' : quantity === 'tau_int' ? 'τint = ½ + Σρ(t). Uncertainty is an asymptotic estimate.' : 'Uses summed chain wall time including thermalization/I/O. Compare validated points; unseen sectors can give misleadingly short correlation times.'}</p>
   </div>;
 }
 
@@ -103,7 +103,7 @@ export default function BenchmarkDashboard() {
   function preset(classical = false) {
     setParameters({ Lx: 4, Ly: classical ? 4 : 2, J0: 1, beta: classical ? 10 : 2, J1: .3, J2: classical ? 0 : .025, hx: classical ? 0 : .2, chains: 4, n_therm: 50000, n_measure: 105000, seed: 20261016 });
     setAxes(classical ? { beta: '10', J1: '', J2: '', hx: '' } : defaultAxes);
-    setMethods(classical ? ['premarked', 'canonical'] : Object.keys(names));
+    setMethods(classical ? ['premarked', 'canonical', 'tempered'] : Object.keys(names));
   }
   const comparison = job && job.status === 'complete' ? jobs.find(candidate => candidate.id !== job.id && candidate.status === 'complete' &&
     ['Lx', 'Ly', 'J0', 'beta', 'J1', 'J2', 'hx', 'seed', 'chains', 'n_therm', 'n_measure'].every(key => candidate.request[key] === job.request[key]) &&
