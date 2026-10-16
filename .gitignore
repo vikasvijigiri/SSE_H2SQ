@@ -1,35 +1,50 @@
-# Local environment and secrets
-.env
-.env.*
-!.env.example
-.venv/
-venv/
-# Python and tool caches
-__pycache__/
-*.py[cod]
-.cache/
-.pytest_cache/
-.ruff_cache/
-# Build products
-*.o
-*.exe
-*.dll
-*.tsbuildinfo
-compile_commands.json
-node_modules/
-dist/
-# Local simulation output (inputs and historical results remain explicit)
-*.log
+# Code-only repository: everything is local unless explicitly allowed.
+*
+!*/
+!.gitignore
+!*.py
+!*.cpp
+!*.c
+!*.hpp
+!*.h
+!*.ts
+!*.tsx
+!*.js
+!*.css
+!*.html
+!*.sh
+!*.toml
+!Makefile
+!Dockerfile
+!LICENSE
+!/frontend/package.json
+!/frontend/package-lock.json
+!/frontend/tsconfig.json
+!/backend/pyrightconfig.json
+!/backend/requirements.txt
+!/tsconfig.json
+# App icons are text-based SVG source required by the interface.
+!/frontend/public/*.svg
+# Always exclude documents, historical runs and generated/vendor code.
+/docs/
+/resource/
+/Analysis/
 /data/
+/configs/
+/.vscode/
+/.cache/
+/.agents/
+/.codex/
+/backend/files/
+/backend/Analysis/**/*.ipynb
+/archive/
+/tools/visualization/lattice_plaquettes.svg
+**/__pycache__/
+**/node_modules/
+**/venv/
+**/.venv/
+**/dist/
+**/build/*.o
+**/build/*.exe
+**/build/*.dll
 /benchmarks/results/
-/backend/files/*cache.json
-/backend/files/temp_runs/
-/backend/build/SSE_data.txt
-/backend/build/spin_configs.json
-# Manuscript build output
-*.aux
-*.bbl
-*.blg
-*.fls
-*.fdb_latexmk
-*.synctex.gz
