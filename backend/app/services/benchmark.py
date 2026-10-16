@@ -620,6 +620,10 @@ def figure_result(job, axis, observable, format, quantity="mean"):
             axes.plot([], [], marker, color=color, label=METHODS[method])
     axes.set_xlabel({"beta": r"$\beta J_0$", "J1": r"$J_1$", "J2": r"$J_2$", "hx": r"$h_x$"}[axis] if axis != "beta" or job["request"]["J0"] == 1 else r"$\beta$")
     axes.set_ylabel(OBSERVABLES[observable][1] if quantity == "mean" else "QMC - ED" if quantity == "difference" else "Integrated correlation time (sweeps)" if quantity == "tau_int" else "ESS / summed chain second")
+    if quantity=="tau_int":
+        positive=[summary["observables"].get(observable,{}).get("tau_int") for point in points for summary in point["methods"].values()]
+        positive=[value for value in positive if value is not None and value>0]
+        if positive and max(positive)/min(positive)>10:axes.set_yscale("log")
     fixed = {k: job["request"][k] for k in ("beta", "J0", "J1", "J2", "hx") if k != axis}
     axes.set_title(f'{job["request"]["Lx"]} x {job["request"]["Ly"]} periodic | '+", ".join(f"{k}={v:g}" for k, v in fixed.items()), fontsize=9)
     axes.legend(frameon=False, fontsize=7)
