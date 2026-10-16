@@ -38,6 +38,16 @@ async def compare_benchmarks(identities: list[str]):
         raise HTTPException(409, str(error)) from error
 
 
+@router.post("/benchmarks/pool", status_code=201)
+async def pool_benchmarks(identities:list[str]):
+    try:
+        return JSONResponse(await run_in_threadpool(benchmark.pool_jobs,identities),status_code=201)
+    except FileNotFoundError as error:
+        raise HTTPException(404,"Source experiment or trace not found") from error
+    except RuntimeError as error:
+        raise HTTPException(409,str(error)) from error
+
+
 @router.get("/benchmarks/{identity}")
 async def benchmark_result(identity: str):
     # Files already contain JSON-native values. Bypass FastAPI's recursive
@@ -89,13 +99,15 @@ async def benchmark_trace(identity: str, point_id: str, method: str, chain: int)
     if method not in benchmark.METHODS or not 0 <= chain < job["request"]["chains"] or point_id not in {p["point_id"] for p in job["points"]}:
         raise HTTPException(404, "Trace not found")
     summary = next(p for p in job["points"] if p["point_id"] == point_id)["methods"].get(method, {})
-    source_identity = summary.get("source_experiment", identity)
-    source_point = summary.get("source_point", point_id)
+    point=next(p for p in job["points"] if p["point_id"]==point_id)
+    if not summary or chain>=len(summary.get("runs",[])):
+        raise HTTPException(404,"Trace not found")
+    source_identity,source_point,source_chain=benchmark.trace_location(identity,point,method,chain)
     if source_identity != identity:
         source = await _benchmark_data(source_identity)
         if source_point not in {p["point_id"] for p in source["points"]}:
             raise HTTPException(404, "Source trace not found")
-    path = benchmark.STORE / source_identity / source_point / method / str(chain) / "trace.npz"
+    path = benchmark.STORE / source_identity / source_point / method / str(source_chain) / "trace.npz"
     if not path.is_file():
         raise HTTPException(404, "This trace is not ready yet")
     return FileResponse(path, filename=f"qmc-{point_id}-{method}-chain{chain}.npz")

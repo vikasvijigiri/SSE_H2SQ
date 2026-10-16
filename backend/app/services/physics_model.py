@@ -67,6 +67,9 @@ def exact_reference(params):
     lx, ly = int(params["Lx"]), int(params["Ly"])
     n = lx*ly
     beta, hx = float(params["beta"]), float(params.get("hx", 0))
+    if (lx,ly)==(4,4) and hx!=0:
+        from .symmetry_ed import exact_4x4_reference
+        return exact_4x4_reference(params)
     indices, local, px, py, pairs, diagonals, polx, poly = basis_data(lx, ly)
     w, v, diagonal, residual = spectrum(lx, ly, float(params["J0"]), float(params["J1"]), float(params["J2"]), hx)
     shifted = w-w.min()

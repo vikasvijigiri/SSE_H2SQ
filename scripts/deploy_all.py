@@ -104,11 +104,15 @@ def worker(token):
         "backend": [str(PYTHON), "-m", "uvicorn", "app.main:app", "--app-dir", str(ROOT / "backend"), "--host", "127.0.0.1", "--port", "8000"],
         "frontend": [shutil.which("node"), str(ROOT / "frontend/node_modules/vite/bin/vite.js"), "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
     }
+    scientific_environment=os.environ.copy()
+    # QMC chains already run in separate processes; avoid nested BLAS pools.
+    for variable in ("OPENBLAS_NUM_THREADS","OMP_NUM_THREADS","MKL_NUM_THREADS"):
+        scientific_environment.setdefault(variable,"1")
     try:
         for name, command in commands.items():
             log = (RUNTIME / f"{name}.log").open("ab")
             logs.append(log)
-            processes.append(subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL))
+            processes.append(subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), env=scientific_environment, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL))
         state = {"token": token, "supervisor": os.getpid(), "children": [p.pid for p in processes], "source_version": source_version()}
         heartbeat.touch()
         temporary = STATE.with_suffix(".tmp")
@@ -124,7 +128,7 @@ def worker(token):
                     time.sleep(min(10, .5 * 2**min(restarts[name]-1, 5)))
                     if stop_file.exists():
                         break
-                    processes[index] = subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), stdout=logs[index], stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                    processes[index] = subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), env=scientific_environment, stdout=logs[index], stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
                     state["children"] = [process.pid for process in processes]
                     for attempt in range(20):
                         try:

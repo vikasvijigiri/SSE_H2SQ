@@ -64,7 +64,7 @@ def get_ed_cache_key(params: SimulationParams) -> str:
     )
 
 
-QMC_CACHE_FILE = os.path.join(CACHE_DIR, "qmc_cache_v3.json")
+QMC_CACHE_FILE = os.path.join(CACHE_DIR, "qmc_cache_v4.json")
 
 def load_qmc_cache() -> dict:
     if not os.path.exists(QMC_CACHE_FILE):

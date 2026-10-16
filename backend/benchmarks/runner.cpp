@@ -4,6 +4,7 @@
 #include "../include/observables.hpp"
 #include "../include/read_input.hpp"
 #include "../include/tempering.hpp"
+#include "../include/estimators.hpp"
 #include <memory>
 #include <algorithm>
 #include <fstream>
@@ -68,7 +69,8 @@ int main(int argc,char** argv) {
     for(auto& spin:cfg.spins.spin)spin=rng.uniform()<.5?-1:1;
     SSEUpdates update;
     update.spatial_premarking=std::string(argv[3])!="vertex";
-    update.canonical_enabled=std::string(argv[3])=="canonical";
+    update.canonical_enabled=std::string(argv[3])=="canonical" || std::string(argv[3])=="symmetry";
+    update.symmetry_enabled=std::string(argv[3])=="symmetry";
     std::unique_ptr<SSETempering> tempering;
     if(std::string(argv[3])=="tempered")tempering=std::make_unique<SSETempering>(p,g,cfg,update,rng);
     long long configuration_checks=0;
@@ -79,9 +81,10 @@ int main(int argc,char** argv) {
     }
     update.diagonal_seconds=update.cluster_seconds=update.gauge_seconds=update.canonical_seconds=0;
     update.canonical_attempts=update.canonical_accepted=0;
+    update.reset_symmetry_measurements();
     if(tempering)tempering->reset_measurements();
     std::ofstream out(argv[2]);out<<std::setprecision(17);
-    out<<"E,E2,E4,mz,mz2,mz4,mx,plaquette,ice,rho,stripe2,stripe4,polar2,polar4,bar_m,bar_m2,bar_px,bar_py,bar_p2,nx,nxf2,ct0,ct1,ct2,ct3,ct4\n";
+    out<<"E,E2,E4,mz,mz2,mz4,mx,plaquette,ice,rho,stripe2,stripe4,polar2,polar4,bar_m,bar_m2,bar_px,bar_py,bar_p2,nx,nxf2,ct0,ct1,ct2,ct3,ct4,boundary_mz2,boundary_mz4,boundary_plaquette,boundary_ice,boundary_rho,boundary_stripe2,boundary_stripe4,boundary_polar2,boundary_polar4,boundary_ct0,boundary_ct1,boundary_ct2,boundary_ct3,boundary_ct4\n";
     long long non_global=0,saturated=0;
     auto start=std::chrono::steady_clock::now();
     for(int step=0;step<p.n_measure;++step) {
@@ -99,19 +102,38 @@ int main(int argc,char** argv) {
         std::sort(times.begin(),times.end());
         std::vector<std::pair<double,int>> events;
         int active=0, nx=0;
+        // Sandvik's propagation-index average, Eq. (24), and exact Kubo
+        // sums, Eq. (27). Recompute only when an off-diagonal event changes
+        // the state; diagonal repetitions are accumulated without remeasuring.
+        auto propagated=cfg.spins.spin;auto at_index=base;
+        std::vector<SSEPathSegment> path;
+        int segment_begin=0;
+        double am=0,am2=0,am4=0,aparity=0,aice=0,astripe2=0,astripe4=0;
+        double apolar2=0,apolar4=0,apx=0,apy=0;
+        auto add_state=[&](const DiagonalMeasurement& value){
+            am+=value.m;am2+=value.m*value.m;am4+=std::pow(value.m,4);
+            aparity+=value.parity;aice+=value.ice;
+            astripe2+=value.stripe2;astripe4+=value.stripe2*value.stripe2;
+            apolar2+=value.polar2;apolar4+=value.polar2*value.polar2;
+            apx+=value.px;apy+=value.py;
+        };
         for(const auto& op:cfg.op_string)if(op.type!=OpType::Identity){
-            if(op.type==OpType::OffDiagonal){++nx;events.push_back({times[active],op.index});}
+            add_state(at_index);
+            if(op.type==OpType::OffDiagonal){
+                ++nx;events.push_back({times[active],op.index});
+                path.push_back({segment_begin,active+1,at_index.molecular_x});
+                segment_begin=active+1;
+                propagated[op.index]*=-1;at_index=measure(propagated,p,g);
+            }
             ++active;
         }
-        auto spin=cfg.spins.spin;auto current=base;
-        double last=0,bar_m=0,bar_px=0,bar_py=0;
-        for(auto event:events){
-            double dt=(event.first-last)/p.beta;
-            bar_m+=dt*current.m;bar_px+=dt*current.px;bar_py+=dt*current.py;
-            spin[event.second]*=-1;current=measure(spin,p,g);last=event.first;
-        }
-        double dt=(p.beta-last)/p.beta;
-        bar_m+=dt*current.m;bar_px+=dt*current.px;bar_py+=dt*current.py;
+        if(!active)add_state(base);
+        if(segment_begin<active || !active)path.push_back({segment_begin,active,at_index.molecular_x});
+        auto improved_ct=sse_path_correlation(path,active);
+        double count=std::max(1,active);
+        double exact_bar_m2=(am*am+am2)/(count*(count+1));
+        double exact_bar_p2=(apx*apx+apy*apy+apolar2)/(count*(count+1));
+        auto spin=cfg.spins.spin;
         double ct[5]={};double fractions[5]={0,.125,.25,.375,.5};
         spin=cfg.spins.spin;size_t next=0;
         for(int t=0;t<5;++t){
@@ -119,14 +141,17 @@ int main(int argc,char** argv) {
             auto at_time=measure(spin,p,g);
             for(size_t q=0;q<base.molecular_x.size();++q)ct[t]+=base.molecular_x[q]*at_time.molecular_x[q]/base.molecular_x.size();
         }
-        out<<obs.E<<','<<obs.E2<<','<<obs.E4<<','<<base.m<<','<<base.m*base.m<<','<<std::pow(base.m,4)<<','<<obs.mx<<','<<base.parity<<','<<base.ice<<','<<(4*base.ice-1)/3<<','<<base.stripe2<<','<<base.stripe2*base.stripe2<<','<<base.polar2<<','<<base.polar2*base.polar2<<','<<bar_m<<','<<bar_m*bar_m<<','<<bar_px<<','<<bar_py<<','<<bar_px*bar_px+bar_py*bar_py<<','<<nx<<','<<nx*(nx-1.);
-        for(auto value:ct)out<<','<<value;
+        out<<obs.E<<','<<obs.E2<<','<<obs.E4<<','<<am/count<<','<<am2/count<<','<<am4/count<<','<<obs.mx<<','<<aparity/count<<','<<aice/count<<','<<(4*aice/count-1)/3<<','<<astripe2/count<<','<<astripe4/count<<','<<apolar2/count<<','<<apolar4/count<<','<<am/count<<','<<exact_bar_m2<<','<<apx/count<<','<<apy/count<<','<<exact_bar_p2<<','<<nx<<','<<nx*(nx-1.);
+        for(double value:improved_ct)out<<','<<value;
+        out<<','<<base.m*base.m<<','<<std::pow(base.m,4)<<','<<base.parity<<','<<base.ice<<','<<(4*base.ice-1)/3<<','<<base.stripe2<<','<<base.stripe2*base.stripe2<<','<<base.polar2<<','<<base.polar2*base.polar2<<','<<ct[0];
+        for(int i=1;i<5;++i)out<<','<<ct[i];
         out<<'\n';
     }
     double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
     if(tempering)for(const auto& u:tempering->warm_updates){
         update.diagonal_seconds+=u.diagonal_seconds;update.cluster_seconds+=u.cluster_seconds;
         update.gauge_seconds+=u.gauge_seconds;update.canonical_seconds+=u.canonical_seconds;
+        update.symmetry_seconds+=u.symmetry_seconds;
         update.canonical_attempts+=u.canonical_attempts;update.canonical_accepted+=u.canonical_accepted;
     }
     std::cout<<std::setprecision(17)<<"{\"replicas\":"<<(tempering?tempering->configs.size():1)<<",\"round_trips\":"<<(tempering?tempering->round_trips:0)<<",\"beta_ladder\":[";
@@ -135,6 +160,8 @@ int main(int argc,char** argv) {
     if(tempering)for(size_t i=0;i<tempering->attempts.size();++i)std::cout<<(i?",":"")<<tempering->attempts[i];
     std::cout<<"],\"swap_accepted\":[";
     if(tempering)for(size_t i=0;i<tempering->accepted.size();++i)std::cout<<(i?",":"")<<tempering->accepted[i];
-    std::cout<<"],";
-    std::cout<<std::setprecision(17)<<"\"measurement_seconds\":"<<elapsed<<",\"configuration_checks\":"<<configuration_checks<<",\"non_global_moves\":"<<non_global<<",\"cutoff_saturations\":"<<saturated<<",\"update_seconds\":{\"diagonal\":"<<update.diagonal_seconds<<",\"cluster\":"<<update.cluster_seconds<<",\"gauge\":"<<update.gauge_seconds<<",\"canonical\":"<<update.canonical_seconds<<"},\"canonical_attempts\":"<<update.canonical_attempts<<",\"canonical_accepted\":"<<update.canonical_accepted<<"}\n";
+    std::cout<<"],\"site_symmetry_orbit_counts\":[";
+    for(int i=0;i<4;++i)std::cout<<(i?",":"")<<(update.site_symmetry?update.site_symmetry->orbit_counts[i]:0);
+    std::cout<<"],\"estimator\":\"propagation-index average, exact SSE Kubo sums and cyclic/binomial dipole correlations (Sandvik 2019, equations 24 and 27)\",";
+    std::cout<<std::setprecision(17)<<"\"measurement_seconds\":"<<elapsed<<",\"configuration_checks\":"<<configuration_checks<<",\"non_global_moves\":"<<non_global<<",\"cutoff_saturations\":"<<saturated<<",\"update_seconds\":{\"diagonal\":"<<update.diagonal_seconds<<",\"cluster\":"<<update.cluster_seconds<<",\"gauge\":"<<update.gauge_seconds<<",\"canonical\":"<<update.canonical_seconds<<",\"symmetry\":"<<update.symmetry_seconds<<"},\"canonical_attempts\":"<<update.canonical_attempts<<",\"canonical_accepted\":"<<update.canonical_accepted<<"}\n";
 }

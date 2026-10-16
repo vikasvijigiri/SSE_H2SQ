@@ -26,11 +26,17 @@ void SSEUpdates::sweep(SSEConfig &cfg, const Parameters &prm,
   gauge_update(cfg, prm, geom, rng);
   auto gauge_end = std::chrono::steady_clock::now();
   if (canonical_enabled) canonical_update(cfg, prm, geom, rng);
+  auto canonical_end = std::chrono::steady_clock::now();
+  if(symmetry_enabled){
+    if(!site_symmetry || !site_symmetry->matches(prm))site_symmetry.emplace(prm,geom);
+    site_symmetry->sweep(cfg,rng);
+  }
   auto end = std::chrono::steady_clock::now();
   diagonal_seconds += std::chrono::duration<double>(diagonal_end-start).count();
   cluster_seconds += std::chrono::duration<double>(cluster_end-diagonal_end).count();
   gauge_seconds += std::chrono::duration<double>(gauge_end-cluster_end).count();
-  canonical_seconds += std::chrono::duration<double>(end-gauge_end).count();
+  canonical_seconds += std::chrono::duration<double>(canonical_end-gauge_end).count();
+  if(symmetry_enabled)symmetry_seconds += std::chrono::duration<double>(end-canonical_end).count();
   if (use_slmc) slmc_update(cfg, prm, geom, rng);
 }
 
