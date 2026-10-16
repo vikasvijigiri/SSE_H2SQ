@@ -4,7 +4,7 @@ from app.services.qmc_results import import_legacy, jackknife_summary, result_te
 from app.api.schemas import SimulationParams, SimulationResult
 from app.services.simulation import run_dummy_simulation
 from app.services import benchmark
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 import json
 import asyncio
@@ -31,7 +31,7 @@ async def start_benchmark(request: benchmark.BenchmarkRequest):
 @router.post("/benchmarks/compare", status_code=201)
 async def compare_benchmarks(identities: list[str]):
     try:
-        return await run_in_threadpool(benchmark.combine_jobs, identities)
+        return JSONResponse(await run_in_threadpool(benchmark.combine_jobs, identities), status_code=201)
     except FileNotFoundError as error:
         raise HTTPException(404, "Source experiment not found") from error
     except RuntimeError as error:
@@ -40,6 +40,12 @@ async def compare_benchmarks(identities: list[str]):
 
 @router.get("/benchmarks/{identity}")
 async def benchmark_result(identity: str):
+    # Files already contain JSON-native values. Bypass FastAPI's recursive
+    # encoder for large multi-schedule ACF payloads polled by the dashboard.
+    return JSONResponse(await _benchmark_data(identity))
+
+
+async def _benchmark_data(identity: str):
     try:
         return await run_in_threadpool(benchmark.get_job, identity)
     except FileNotFoundError as error:
@@ -63,7 +69,7 @@ async def resume_benchmark(identity: str):
 
 @router.get("/benchmarks/{identity}/export")
 async def export_benchmark(identity: str, format: str = "csv", axis: str = "beta", observable: str = "E", quantity: str = "mean"):
-    job = await benchmark_result(identity)
+    job = await _benchmark_data(identity)
     if format == "csv":
         content, media = benchmark.csv_result(job), "text/csv"
     elif format == "json":
@@ -79,14 +85,14 @@ async def export_benchmark(identity: str, format: str = "csv", axis: str = "beta
 
 @router.get("/benchmarks/{identity}/traces/{point_id}/{method}/{chain}")
 async def benchmark_trace(identity: str, point_id: str, method: str, chain: int):
-    job = await benchmark_result(identity)
+    job = await _benchmark_data(identity)
     if method not in benchmark.METHODS or not 0 <= chain < job["request"]["chains"] or point_id not in {p["point_id"] for p in job["points"]}:
         raise HTTPException(404, "Trace not found")
     summary = next(p for p in job["points"] if p["point_id"] == point_id)["methods"].get(method, {})
     source_identity = summary.get("source_experiment", identity)
     source_point = summary.get("source_point", point_id)
     if source_identity != identity:
-        source = await benchmark_result(source_identity)
+        source = await _benchmark_data(source_identity)
         if source_point not in {p["point_id"] for p in source["points"]}:
             raise HTTPException(404, "Source trace not found")
     path = benchmark.STORE / source_identity / source_point / method / str(chain) / "trace.npz"
