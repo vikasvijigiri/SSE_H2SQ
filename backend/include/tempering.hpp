@@ -47,7 +47,8 @@ public:
             configs.push_back(&c);updates.push_back(&warm_updates[i]);
         }
         configs.push_back(&cold);updates.push_back(&cold_update);
-        for(auto* u:updates){u->spatial_premarking=true;u->canonical_enabled=true;}
+        // Preserve the original tempering schedule as a controlled comparison.
+        for(auto* u:updates){u->spatial_premarking=true;u->canonical_enabled=true;u->symmetry_enabled=false;u->local_skip_probability=0.;}
         labels.resize(configs.size());std::iota(labels.begin(),labels.end(),0);
         journey.assign(configs.size(),0);attempts.assign(configs.size()-1,0);accepted=attempts;
     }
@@ -81,7 +82,7 @@ public:
     void reset_measurements(){
         std::fill(attempts.begin(),attempts.end(),0);std::fill(accepted.begin(),accepted.end(),0);
         std::fill(journey.begin(),journey.end(),0);round_trips=0;
-        for(auto* u:updates){u->diagonal_seconds=u->cluster_seconds=u->gauge_seconds=u->canonical_seconds=0;u->canonical_attempts=u->canonical_accepted=0;}
+        for(auto* u:updates){u->diagonal_seconds=u->cluster_seconds=u->gauge_seconds=u->canonical_seconds=0;u->canonical_attempts=u->canonical_accepted=0;u->reset_symmetry_measurements();}
     }
 };
 #endif

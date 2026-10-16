@@ -76,7 +76,12 @@ def summarize(chains, params):
     beta, n = params["beta"], params["Lx"]*params["Ly"]
     molecules, hx = n//2, params["hx"]
     columns = chains[0].dtype.names
-    full_means = {key: float(np.mean([np.mean(chain[key]) for chain in chains])) for key in columns}
+    sizes=np.asarray([len(chain) for chain in chains],dtype=float)
+    sample_count=int(sizes.sum())
+    chain_weights=sizes/sample_count
+    chain_means=[{key:float(chain[key].mean()) for key in columns} for chain in chains]
+    full_means={key:float(sum(weight*means[key] for weight,means in zip(chain_weights,chain_means))) for key in columns}
+    chain_estimates=[derived(means,beta,n,molecules,hx) for means in chain_means]
     values = derived(full_means, beta, n, molecules, hx)
     diagnostics, projected = {}, {}
     largest_tau = .5
@@ -93,15 +98,15 @@ def summarize(chains, params):
     length = min(map(len, chains))
     requested_block = max(32, math.ceil(10*largest_tau))
     block_size = min(requested_block, max(1, length//8))
-    block_count = length//block_size
-    blocks = np.asarray([[np.mean(chain[key][:block_count*block_size].reshape(block_count, block_size), axis=1) for key in columns] for chain in chains])
-    blocks = blocks.transpose(0, 2, 1).reshape(-1, len(columns))
-    means = dict(zip(columns, blocks.mean(axis=0)))
+    block_counts=[len(chain)//block_size for chain in chains]
+    blocks = np.concatenate([np.column_stack([chain[key][:count*block_size].reshape(count,block_size).mean(axis=1) for key in columns]) for chain,count in zip(chains,block_counts)])
+    # All rows enter the point estimate, including the final partial block.
+    means=full_means
     values = derived(means, beta, n, molecules, hx)
     leave_out = []
-    block_sum = blocks.sum(axis=0)
+    sample_sum=np.asarray([means[key]*sample_count for key in columns])
     for block in blocks:
-        leave_out.append(derived(dict(zip(columns, (block_sum-block)/(len(blocks)-1))), beta, n, molecules, hx))
+        leave_out.append(derived(dict(zip(columns,(sample_sum-block_size*block)/(sample_count-block_size))),beta,n,molecules,hx))
     result = {}
     for key, value in values.items():
         if value is None:
@@ -112,10 +117,13 @@ def summarize(chains, params):
         rhat = split_rhat(streams) if len(chains) > 1 else None
         estimates = [row[key] for row in leave_out]
         valid = all(estimate is not None and math.isfinite(estimate) for estimate in estimates)
-        jackknife_error = math.sqrt((len(blocks)-1)*float(np.var(estimates))) if valid else None
-        chain_values = [derived({column: float(chain[column].mean()) for column in columns}, beta, n, molecules, hx)[key] for chain in chains]
-        between_error = float(np.std(chain_values, ddof=1)/np.sqrt(len(chains))) if len(chains) > 1 else 0.
-        gamma_variance = sum(np.var(stream, ddof=1)*2*stat["tau"]/len(stream) for stream, stat in zip(streams, stats) if stat["tau"] is not None)/len(chains)**2
+        # Equal-size delete-block jackknife, normalized to the actual row
+        # count when final partial blocks are held in the point estimate.
+        jackknife_error = math.sqrt((sample_count-block_size)**2/(sample_count*block_size)*float(np.var(estimates,ddof=1))) if valid else None
+        chain_values = [estimate[key] for estimate in chain_estimates]
+        center=float(np.dot(chain_weights,chain_values))
+        between_error=math.sqrt(float(np.sum(chain_weights**2*(np.asarray(chain_values)-center)**2/(1-chain_weights)))) if len(chains)>1 else 0.
+        gamma_variance = sum(len(stream)*np.var(stream,ddof=1)*2*stat["tau"] for stream,stat in zip(streams,stats) if stat["tau"] is not None)/sample_count**2
         error = max(jackknife_error or 0., between_error, math.sqrt(gamma_variance))
         constant = all(stat["constant"] for stat in stats)
         analytic_zero = key == "mx" and hx == 0
@@ -137,4 +145,20 @@ def summarize(chains, params):
         curve = [{"lag": int(lag), "value": float(np.mean([acf[lag] for acf in acfs]))} for lag in lag_indices] if acfs else []
         taus = [stat["tau"] for stat in stats if stat["tau"] is not None]
         result[key] = {"mean": float(value), "error": float(error) if error is not None else None, "tau_int": float(np.mean(taus)) if taus else None, "tau_error": float(np.mean([stat["tau_error"] for stat in stats if stat["tau_error"] is not None])) if taus else None, "ess": float(ess) if taus else None, "rhat": rhat if rhat is not None and math.isfinite(rhat) else None, "acf": curve, "flags": flags, "status": "analytic zero" if analytic_zero else "review" if flags else "checks passed"}
-    return {"observables": result, "block_size": block_size, "blocks": len(blocks), "retained_samples": block_count*block_size*len(chains), "discarded_tail_per_chain": length-block_count*block_size, "chains": len(chains), "error_method": "maximum of blocked jackknife, per-chain ACF variance estimate and independent-chain SE", "tau_convention": "tau_int=1/2+sum rho(t), in complete sweeps; derived observables use linearized influence series"}
+    comparisons={}
+    for key in ("mz2","stripe2","polar2","ct0","ct2","ct4"):
+        raw="boundary_"+key
+        if raw not in columns:continue
+        streams=[chain[raw] for chain in chains]
+        raw_stats=[autocorrelation(stream) for stream in streams]
+        mean=full_means[raw]
+        raw_blocks=np.concatenate([stream[:count*block_size].reshape(count,block_size).mean(axis=1) for stream,count in zip(streams,block_counts)])
+        block_error=float(np.std(raw_blocks,ddof=1)*np.sqrt(block_size/sample_count))
+        acf_error=math.sqrt(sum(len(stream)*np.var(stream,ddof=1)*2*stat["tau"] for stream,stat in zip(streams,raw_stats) if stat["tau"] is not None)/sample_count**2)
+        raw_chain_means=np.asarray([values[raw] for values in chain_means])
+        chain_error=math.sqrt(float(np.sum(chain_weights**2*(raw_chain_means-mean)**2/(1-chain_weights)))) if len(chains)>1 else 0.
+        raw_error=max(block_error,acf_error,chain_error)
+        if all(stat["constant"] for stat in raw_stats) and raw_error==0:raw_error=None
+        improved=result[key]
+        comparisons[key]={"boundary_mean":mean,"boundary_SE":raw_error,"improved_mean":improved["mean"],"improved_SE":improved["error"],"SE_gain":raw_error/improved["error"] if raw_error and improved["error"] else None}
+    return {"observables": result,"estimator_comparison":comparisons,"block_size":block_size,"blocks":len(blocks),"retained_samples":sample_count,"samples_in_full_blocks":sum(block_counts)*block_size,"partial_block_rows_per_chain":[len(chain)-count*block_size for chain,count in zip(chains,block_counts)],"discarded_tail_per_chain":0,"chains":len(chains),"error_method":"sample-count weighted means; maximum of delete-block jackknife, chain-wise ACF variance and HC2 independent-chain SE; every row enters the point estimate","tau_convention":"tau_int=1/2+sum rho(t), in complete sweeps; derived observables use linearized influence series"}

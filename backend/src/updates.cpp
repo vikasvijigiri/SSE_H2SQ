@@ -15,6 +15,12 @@
 // ======================================================
 void SSEUpdates::sweep(SSEConfig &cfg, const Parameters &prm,
                        const Geometry &geom, RNG &rng) {
+  if(symmetry_enabled){
+    if(!site_symmetry || !site_symmetry->matches(prm))site_symmetry.emplace(prm,geom);
+    // This fixed model-based floor is set before sampling; padding is then
+    // allowed to grow during thermalization only. Production keeps M fixed.
+    site_symmetry->ensure_cutoff(cfg);
+  }
   auto start = std::chrono::steady_clock::now();
   diagonal_update(cfg, prm, geom, rng);
   auto diagonal_end = std::chrono::steady_clock::now();
@@ -26,11 +32,17 @@ void SSEUpdates::sweep(SSEConfig &cfg, const Parameters &prm,
   gauge_update(cfg, prm, geom, rng);
   auto gauge_end = std::chrono::steady_clock::now();
   if (canonical_enabled) canonical_update(cfg, prm, geom, rng);
+  auto canonical_end = std::chrono::steady_clock::now();
+  if(symmetry_enabled){
+    if(!site_symmetry || !site_symmetry->matches(prm))site_symmetry.emplace(prm,geom);
+    site_symmetry->sweep(cfg,rng);
+  }
   auto end = std::chrono::steady_clock::now();
   diagonal_seconds += std::chrono::duration<double>(diagonal_end-start).count();
   cluster_seconds += std::chrono::duration<double>(cluster_end-diagonal_end).count();
   gauge_seconds += std::chrono::duration<double>(gauge_end-cluster_end).count();
-  canonical_seconds += std::chrono::duration<double>(end-gauge_end).count();
+  canonical_seconds += std::chrono::duration<double>(canonical_end-gauge_end).count();
+  if(symmetry_enabled)symmetry_seconds += std::chrono::duration<double>(end-canonical_end).count();
   if (use_slmc) slmc_update(cfg, prm, geom, rng);
 }
 
@@ -70,6 +82,7 @@ void SSEUpdates::diagonal_update(SSEConfig &cfg, const Parameters &prm,
     SSEOperator &op = cfg.op_string[p];
 
     if (op.type == OpType::Identity) {
+      if(local_skip_probability>0 && rng.uniform()<local_skip_probability){++diagonal_skips;continue;}
       if (m_N_active > 0) {
         int type_idx = int(rng.uniform() * m_N_active);
         OpSubtype sub = m_active_subtypes[type_idx];
@@ -90,6 +103,7 @@ void SSEUpdates::diagonal_update(SSEConfig &cfg, const Parameters &prm,
         }
       }
     } else if (op.type == OpType::Diagonal) {
+      if(local_skip_probability>0 && rng.uniform()<local_skip_probability){++diagonal_skips;continue;}
       OpSubtype sub = op.subtype;
       int n_diag = m_n_diag_by_sub[static_cast<int>(sub)]; // O(1) array lookup
 
@@ -655,6 +669,7 @@ void SSEUpdates::gauge_update(SSEConfig &cfg, const Parameters &prm,
 // boundary spin inversion; only diagonal matrix elements change. Zero weights
 // reject the move. The ratio uses every affected propagated vertex.
 void SSEUpdates::canonical_update(SSEConfig& cfg, const Parameters& prm, const Geometry& geom, RNG& rng) {
+  if(local_skip_probability>0 && rng.uniform()<local_skip_probability){++canonical_skips;return;}
   ++canonical_attempts;
   int site = int(rng.uniform() * prm.Ns);
   SSEConfig old_state, new_state;

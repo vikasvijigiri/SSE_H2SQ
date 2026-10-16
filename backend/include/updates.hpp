@@ -2,6 +2,8 @@
 #define SSE_UPDATES_HPP
 
 #include <vector>
+#include <optional>
+#include "site_symmetry.hpp"
 #include "variables.hpp"
 
 // ======================================================
@@ -13,7 +15,13 @@ class SSEUpdates {
 public:
     SSEUpdates() = default;
     bool spatial_premarking = true;
-    bool canonical_enabled = false;
+    bool canonical_enabled = true;
+    bool symmetry_enabled = true;
+    double local_skip_probability = .01;
+    long long diagonal_skips=0,canonical_skips=0;
+    double symmetry_seconds = 0.;
+    std::optional<SSESiteSymmetry> site_symmetry;
+    void reset_symmetry_measurements(){symmetry_seconds=0.;diagonal_skips=canonical_skips=0;if(site_symmetry)site_symmetry->orbit_counts.fill(0);}
     double diagonal_seconds = 0, cluster_seconds = 0, gauge_seconds = 0, canonical_seconds = 0;
     long long canonical_attempts = 0, canonical_accepted = 0;
     void canonical_update(SSEConfig&, const Parameters&, const Geometry&, RNG&);

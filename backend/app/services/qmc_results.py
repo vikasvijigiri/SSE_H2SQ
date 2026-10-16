@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from contextlib import contextmanager
 
-DATABASE = Path(__file__).resolve().parents[2] / "files" / "qmc_runs_v3.sqlite3"
+DATABASE = Path(__file__).resolve().parents[2] / "files" / "qmc_runs_v4.sqlite3"
 OBSERVABLES = ("enrg", "enrg2", "enrg4", "SMag_square", "SMag_four", "Mag_x")
 
 
