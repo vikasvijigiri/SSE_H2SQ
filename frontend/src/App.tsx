@@ -8,7 +8,7 @@ import GroundValidation from './pages/GroundValidation.tsx';
 
 type Page = 'simulation' | 'plots' | 'benchmarks' | 'ground';
 
-function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Page) => void, isServerReady: boolean }) {
+function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Page) => void, isServerReady: boolean | null }) {
   return (
     <header className="border-b border-slate-800/60 bg-[#080914]/40 backdrop-blur-xl sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
@@ -58,10 +58,12 @@ function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Pag
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
               Server Ready
             </div>
+          ) : isServerReady === null ? (
+            <div className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold">Checking server</div>
           ) : (
             <div className="px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-2">
               <ServerOff className="w-3 h-3" />
-              Server Offline
+              Server unreachable
             </div>
           )}
         </div>
@@ -72,17 +74,23 @@ function Header({ page, setPage, isServerReady }: { page: Page; setPage: (p: Pag
 
 function App() {
   const [page, setPage] = useState<Page>(window.location.hash === '#ground-validation' ? 'ground' : window.location.hash === '#benchmarks' ? 'benchmarks' : window.location.hash === '#plots' ? 'plots' : 'simulation');
-  const [isServerReady, setIsServerReady] = useState(false);
+  const [isServerReady, setIsServerReady] = useState<boolean | null>(null);
 
   useEffect(() => { window.history.replaceState(null, '', `#${page === 'ground' ? 'ground-validation' : page}`); }, [page]);
 
   useEffect(() => {
+    let checking = false;
+    let mounted = true;
     const checkHealth = async () => {
+      if (checking) return;
+      checking = true;
       try {
-        await axios.get('http://127.0.0.1:8000/', { timeout: 2000 });
-        setIsServerReady(true);
+        await axios.get('http://127.0.0.1:8000/', { timeout: 5000 });
+        if (mounted) setIsServerReady(true);
       } catch (error) {
-        setIsServerReady(false);
+        if (mounted) setIsServerReady(false);
+      } finally {
+        checking = false;
       }
     };
 
@@ -91,7 +99,7 @@ function App() {
 
     // Poll every 5 seconds
     const interval = setInterval(checkHealth, 5000);
-    return () => clearInterval(interval);
+    return () => { mounted = false; clearInterval(interval); };
   }, []);
 
   return (
@@ -103,7 +111,7 @@ function App() {
 
       {page === 'simulation' ? (
         <main className="max-w-7xl mx-auto px-6 py-8 relative z-10">
-          <SimulationDashboard isServerReady={isServerReady} />
+          <SimulationDashboard isServerReady={isServerReady === true} />
         </main>
       ) : page === 'benchmarks' ? (
         <BenchmarkDashboard />

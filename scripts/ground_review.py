@@ -80,6 +80,8 @@ def main():
         report['publication_assets_checked']=len(manifest);report['latex_compiled']=False
         if (paper/'metadata/latex-build.json').exists():
             build=json.loads((paper/'metadata/latex-build.json').read_text());assert build['compiled'];assert digest(paper/'validation-report.pdf')==build['pdf_sha256']
+            assert build.get('input_sha256'),'Compiled inputs are not recorded.'
+            assert all(digest(paper/name)==sha for name,sha in build['input_sha256'].items()),'Compiled PDF is stale.'
             report['latex_compiled']=True;report['latex_pages']=build['pages']
         (paper/'metadata/review.json').write_text(json.dumps(report,indent=2,allow_nan=False),encoding='utf-8')
         retained={p.relative_to(folder).as_posix():digest(p) for p in sorted(folder.rglob('*')) if p.is_file() and p.name!='study.tmp'}
