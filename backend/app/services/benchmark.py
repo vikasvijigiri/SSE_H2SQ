@@ -115,7 +115,7 @@ def list_jobs():
 def provenance():
     sources = [ROOT / "backend/src/updates.cpp", ROOT / "backend/src/variables.cpp", ROOT / "backend/src/observables.cpp", ROOT / "backend/benchmarks/runner.cpp", Path(__file__).with_name("physics_model.py"), Path(__file__).with_name("benchmark_statistics.py")]
     sources += sorted((ROOT / "backend/include").glob("*.hpp"))
-    return {"model_version": MODEL_VERSION, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), "working_tree_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)), "engine_sha256": hashlib.sha256(EXECUTABLE.read_bytes()).hexdigest(), "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}, "python": platform.python_version(), "numpy": np.__version__, "scipy": scipy.__version__, "platform": platform.platform(), "processor": platform.processor(), "compiler": subprocess.check_output(["g++", "--version"], text=True).splitlines()[0], "flags": "-O2 -std=c++17 -Wall; no fast-math"}
+    return {"model_version": MODEL_VERSION, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), "working_tree_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)), "engine_sha256": hashlib.sha256(EXECUTABLE.read_bytes()).hexdigest(), "source_sha256": {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}, "python": platform.python_version(), "numpy": np.__version__, "scipy": scipy.__version__, "platform": platform.platform(), "processor": platform.processor(), "compiler": subprocess.check_output(["g++", "--version"], text=True).splitlines()[0], "flags": "-O2 -std=c++17 -Wall; no fast-math"}
 
 
 def archive_sources(job):
@@ -224,6 +224,10 @@ def execute(job, request, cancelled):
                         for observation in summary["observables"].values():
                             observation.setdefault("flags", []).append("fewer than ten measured temperature round trips in a chain")
                             observation["status"] = "review"
+                    if algorithm == "tempered" and any(any(n >= 100 and a/n < .02 for n, a in zip(row.get("swap_attempts", []), row.get("swap_accepted", []))) for row in metadata):
+                        for observation in summary["observables"].values():
+                            observation.setdefault("flags", []).append("temperature ladder bottleneck: exchange acceptance below 2 percent")
+                            observation["status"] = "review"
                     summary["runs"] = metadata
                     summary["measurement_seconds"] = sum(row["measurement_seconds"] for row in metadata)
                     summary["total_seconds"] = sum(row["wall_seconds"] for row in metadata)
@@ -262,7 +266,7 @@ async def start_job(request):
         event = threading.Event()
         ACTIVE[identity] = event
     unique = {json.dumps({key: float(value if key == axis else getattr(request, key)) for key in ("Lx", "Ly", "J0", "beta", "J1", "J2", "hx")}, sort_keys=True) for axis, values in request.axes.items() for value in values}
-    job = {"id": identity, "created": datetime.now(timezone.utc).isoformat(), "status": "queued", "request": request.model_dump(), "completed_runs": 0, "total_runs": len(unique)*len(request.algorithms)*request.chains, "points": [], "message": "Queued", "provenance": run_provenance, "methods": METHODS, "observables": OBSERVABLES, "citations": [{"title": "Biswas & Damle: plaquette clusters and premarking", "url": "https://arxiv.org/abs/1812.05326"}, {"title": "Hukushima & Nemoto: exchange Monte Carlo", "url": "https://arxiv.org/abs/cond-mat/9512035"}, {"title": "Wolff: correlated-sample error analysis", "url": "https://arxiv.org/abs/hep-lat/0306017"}], "definitions": {"hamiltonian": "-J0 sum A + J1 sum(s0*s2+s1*s3) + J2 sum tilde(Pa).tilde(Pb) - hx sum sigma_x", "dipoles": "Cyclic (s0,s1,s2,s3); tilde Px=(s0-s1-s2+s3)/4, tilde Py=(s0+s1-s2-s3)/4; Pp=(-1)^x tilde Pp. Neighbor signs are opposite, so -J2 Pa.Pb equals +J2 tilde Pa.tilde Pb.", "ed_errors": "Complete finite-system ED has zero sampling error. Eigenpair residual is reported separately; no invented stochastic ED error bars.", "qmc_errors": "One standard error; maximum of correlation-aware, block-jackknife and independent-chain estimates. Review flagged points before publication.", "tempering": "Geometric temperature ladder from beta<=0.25/max(1,|couplings|) to target, adjacent ratio<=1.6. Equal padding lengths frozen after thermalization; exchange acceptance=min(1,(beta_i/beta_j)^(n_j-n_i)). Odd/even exchanges every ten sweeps. Measured round trips and per-edge acceptance are recorded; tune the ladder if overlap is poor.", "autocorrelation": "Complete update schedules are stationary kernels. Individual diagonal/cluster steps are timed, not assigned misleading isolated-chain autocorrelation times.", "stripe": "m_q=sum sigma_z exp(i q.r)/(2N); stripe2=m_(pi,0)^2+m_(0,pi)^2; Q=0.5[1-<stripe2^2>/(3<stripe2>^2)].", "ice": "rho/Np=(4 f_ice-1)/3", "susceptibility": "Diagonal Kubo responses use imaginary-time averages; equal-time beta*variance is not substituted at nonzero field.", "scope": "One layer, J3=0, periodic even checkerboard. One-factor-at-a-time sweeps; small-system validation does not establish thermodynamic phase boundaries."}}
+    job = {"id": identity, "created": datetime.now(timezone.utc).isoformat(), "status": "queued", "request": request.model_dump(), "completed_runs": 0, "total_runs": len(unique)*len(request.algorithms)*request.chains, "points": [], "message": "Queued", "provenance": run_provenance, "methods": METHODS, "observables": OBSERVABLES, "citations": [{"title": "Biswas & Damle: plaquette clusters and premarking", "url": "https://arxiv.org/abs/1812.05326"}, {"title": "Hukushima & Nemoto: exchange Monte Carlo", "url": "https://arxiv.org/abs/cond-mat/9512035"}, {"title": "Wolff: correlated-sample error analysis", "url": "https://arxiv.org/abs/hep-lat/0306017"}], "definitions": {"hamiltonian": "-J0 sum A + J1 sum(s0*s2+s1*s3) + J2 sum tilde(Pa).tilde(Pb) - hx sum sigma_x", "dipoles": "Cyclic (s0,s1,s2,s3); tilde Px=(s0-s1-s2+s3)/4, tilde Py=(s0+s1-s2-s3)/4; Pp=(-1)^x tilde Pp. Neighbor signs are opposite, so -J2 Pa.Pb equals +J2 tilde Pa.tilde Pb.", "ed_errors": "Complete finite-system ED has zero sampling error. Eigenpair residual is reported separately; no invented stochastic ED error bars.", "qmc_errors": "One standard error; maximum of correlation-aware, block-jackknife and independent-chain estimates. Review flagged points before publication.", "tempering": "Temperature ladder starts at beta<=0.25/max(1,|couplings|). Adjacent sqrt(beta) spacing<=0.7/sqrt(G_bound), also ratio<=1.6, with at most 64 replicas. G_bound is a conservative expansion-order density bound. Actual overlap and round trips must still be checked. Equal padding lengths frozen after thermalization; exchange acceptance=min(1,(beta_i/beta_j)^(n_j-n_i)). Odd/even exchanges every ten sweeps. Measured round trips and per-edge acceptance are recorded; tune the ladder if overlap is poor.", "autocorrelation": "Complete update schedules are stationary kernels. Individual diagonal/cluster steps are timed, not assigned misleading isolated-chain autocorrelation times.", "stripe": "m_q=sum sigma_z exp(i q.r)/(2N); stripe2=m_(pi,0)^2+m_(0,pi)^2; Q=0.5[1-<stripe2^2>/(3<stripe2>^2)].", "ice": "rho/Np=(4 f_ice-1)/3", "susceptibility": "Diagonal Kubo responses use imaginary-time averages; equal-time beta*variance is not substituted at nonzero field.", "scope": "One layer, J3=0, periodic even checkerboard. One-factor-at-a-time sweeps; small-system validation does not establish thermodynamic phase boundaries."}}
     try:
         archive_sources(job)
         save_job(job)
@@ -276,6 +280,8 @@ async def start_job(request):
 
 async def resume_job(identity):
     job = get_job(identity)
+    if job.get("source_experiments"):
+        raise RuntimeError("A comparison retains original experiments; start a new experiment to resample.")
     current = provenance()
     # An analysis-only change permits reanalysis; changing the physical model or
     # sampler requires a fresh experiment. Record both analysis versions.
@@ -308,6 +314,51 @@ def cancel_job(identity):
         if event:
             event.set()
     return bool(event)
+
+
+def combine_jobs(identities):
+    """Compare completed schedules while retaining each source's data/provenance."""
+    if not 2 <= len(identities) <= 4 or len(set(identities)) != len(identities):
+        raise RuntimeError("Choose two to four distinct completed experiments.")
+    jobs = [get_job(identity) for identity in identities]
+    if any(job["status"] != "complete" for job in jobs):
+        raise RuntimeError("Only completed experiments can be combined.")
+    if any(len({job["request"][key] for job in jobs}) != 1 for key in ("chains", "n_therm", "n_measure", "seed")):
+        raise RuntimeError("Use matching chain counts, sweep budgets and seed conventions for a controlled comparison.")
+    if len({job["provenance"]["model_version"] for job in jobs}) != 1 or len({next((value for name, value in job["provenance"]["source_sha256"].items() if name.replace(chr(92), "/") == "backend/app/services/physics_model.py"), None) for job in jobs}) != 1:
+        raise RuntimeError("Reference Hamiltonian versions differ.")
+    def key(point):
+        return json.dumps({name: float(value) for name, value in point["params"].items()}, sort_keys=True)
+    lookups = [{key(point): point for point in job["points"]} for job in jobs]
+    if any(set(lookup) != set(lookups[0]) for lookup in lookups):
+        raise RuntimeError("The physical parameter grids differ; compare matching grids.")
+    algorithms = [algorithm for job in jobs for algorithm in job["request"]["algorithms"]]
+    if len(algorithms) != len(set(algorithms)):
+        raise RuntimeError("Schedules overlap. Choose experiments with distinct schedules.")
+    result = json.loads(json.dumps(jobs[0]))
+    result["id"] = uuid.uuid4().hex
+    result["created"] = datetime.now(timezone.utc).isoformat()
+    result["request"]["algorithms"] = algorithms
+    result["completed_runs"] = sum(job["completed_runs"] for job in jobs)
+    result["total_runs"] = sum(job["total_runs"] for job in jobs)
+    result["message"] = "Comparison of completed experiments; original traces and source provenance retained."
+    result["source_experiments"] = [{"id": identity, "provenance": job["provenance"], "request": job["request"]} for identity, job in zip(identities, jobs)]
+    result["definitions"].update(jobs[-1]["definitions"])
+    result["citations"] = list({source["url"]: source for job in jobs for source in job["citations"]}.values())
+    result.pop("review", None)
+    for point in result["points"]:
+        merged = {}
+        for identity, lookup in zip(identities, lookups):
+            source = lookup[key(point)]
+            for name, reference in point["ed"]["values"].items():
+                other = source["ed"]["values"].get(name)
+                if reference is not None and (other is None or not np.isclose(reference, other, atol=1e-12, rtol=1e-12)):
+                    raise RuntimeError("Complete ED references disagree.")
+            for method, summary in source["methods"].items():
+                merged[method] = {**summary, "source_experiment": summary.get("source_experiment", identity), "source_point": summary.get("source_point", source["point_id"])}
+        point["methods"] = merged
+    save_job(result)
+    return result
 
 
 def compare_reference(summary, reference):

@@ -28,6 +28,16 @@ async def start_benchmark(request: benchmark.BenchmarkRequest):
         raise HTTPException(409, str(error)) from error
 
 
+@router.post("/benchmarks/compare", status_code=201)
+async def compare_benchmarks(identities: list[str]):
+    try:
+        return await run_in_threadpool(benchmark.combine_jobs, identities)
+    except FileNotFoundError as error:
+        raise HTTPException(404, "Source experiment not found") from error
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
 @router.get("/benchmarks/{identity}")
 async def benchmark_result(identity: str):
     try:
@@ -72,7 +82,14 @@ async def benchmark_trace(identity: str, point_id: str, method: str, chain: int)
     job = await benchmark_result(identity)
     if method not in benchmark.METHODS or not 0 <= chain < job["request"]["chains"] or point_id not in {p["point_id"] for p in job["points"]}:
         raise HTTPException(404, "Trace not found")
-    path = benchmark.STORE / identity / point_id / method / str(chain) / "trace.npz"
+    summary = next(p for p in job["points"] if p["point_id"] == point_id)["methods"].get(method, {})
+    source_identity = summary.get("source_experiment", identity)
+    source_point = summary.get("source_point", point_id)
+    if source_identity != identity:
+        source = await benchmark_result(source_identity)
+        if source_point not in {p["point_id"] for p in source["points"]}:
+            raise HTTPException(404, "Source trace not found")
+    path = benchmark.STORE / source_identity / source_point / method / str(chain) / "trace.npz"
     if not path.is_file():
         raise HTTPException(404, "This trace is not ready yet")
     return FileResponse(path, filename=f"qmc-{point_id}-{method}-chain{chain}.npz")

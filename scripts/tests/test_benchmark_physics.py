@@ -9,6 +9,7 @@ import unittest
 import tempfile
 import threading
 import math
+from unittest.mock import patch
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -85,6 +86,21 @@ class StatisticsTests(unittest.TestCase):
         compare_reference(summary, {"values": {"ct0": .5}})
         self.assertEqual(summary["observables"]["ct0"]["status"], "review")
         self.assertLess(summary["observables"]["ct0"]["pull"], -1000)
+
+    def test_saved_comparison_preserves_original_provenance_and_windows_paths(self):
+        from app.services import benchmark
+        params = dict(Lx=2, Ly=2, beta=1., J0=0., J1=0., J2=0., hx=0.)
+        def fixture(identity, method, path):
+            return {"id": identity, "created": "2026-10-16", "status": "complete", "request": {**params, "chains": 2, "n_therm": 100, "n_measure": 1000, "seed": 1, "axes": {"beta": [1.]}, "algorithms": [method]}, "completed_runs": 2, "total_runs": 2, "points": [{"axis": "beta", "x": 1., "point_id": "0"*16, "params": params, "ed": {"values": {"E": 0.}}, "methods": {method: {"observables": {"E": {"mean": 0., "error": .1, "status": "checks passed"}}}}}], "provenance": {"model_version": "test", "source_sha256": {path: "reference-hash"}}, "definitions": {}, "citations": []}
+        with tempfile.TemporaryDirectory(dir=ROOT / ".cache") as directory, patch.object(benchmark, "STORE", Path(directory)):
+            benchmark.save_job(fixture("1"*32, "vertex", "backend\\app\\services\\physics_model.py"))
+            benchmark.save_job(fixture("2"*32, "tempered", "backend/app/services/physics_model.py"))
+            combined = benchmark.combine_jobs(["1"*32, "2"*32])
+            self.assertEqual(combined["completed_runs"], 4)
+            self.assertEqual(set(combined["points"][0]["methods"]), {"vertex", "tempered"})
+            self.assertEqual(combined["source_experiments"][0]["request"]["algorithms"], ["vertex"])
+            self.assertEqual(benchmark.get_job("1"*32)["request"]["algorithms"], ["vertex"])
+            self.assertEqual(combined["points"][0]["methods"]["tempered"]["source_experiment"], "2"*32)
 
 
 class KernelIntegrationTests(unittest.TestCase):

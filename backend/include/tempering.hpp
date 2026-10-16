@@ -25,12 +25,19 @@ private:
     std::vector<int> labels, journey;
     long long steps=0;
 public:
-    SSETempering(const Parameters& target, SSEConfig& cold, SSEUpdates& cold_update, RNG& rng) {
+    SSETempering(const Parameters& target, const Geometry& g, SSEConfig& cold, SSEUpdates& cold_update, RNG& rng) {
         double scale=std::max({1.,std::abs(target.J0),std::abs(target.J1),std::abs(target.J2),std::abs(target.J3),std::abs(target.hx)});
         double beta=std::min(.25/scale,target.beta);
-        while(beta<target.beta*(1-1e-12)) {
+        // n grows approximately as beta*G. Uniform sqrt(beta) spacing limits
+        // expansion-order separation in units of its typical fluctuations.
+        // Use a conservative operator-norm bound on G, then verify actual swaps.
+        double bound=2*g.blackPlaquettes.size()*(std::abs(target.J0)+2*std::abs(target.J1))+2*target.Ns*std::abs(target.hx);
+        for(const auto& b:g.j2bonds)bound+=2*std::abs(b.J_val*target.J2);
+        bound+=2*g.j3bonds.size()*std::abs(target.J3);
+        double spacing=.7/std::sqrt(std::max(1.,bound));
+        while(beta<target.beta*(1-1e-12) && parameters.size()<63) {
             parameters.push_back(target);parameters.back().beta=beta;parameters.back().T=1/beta;
-            beta=std::min(target.beta,beta*1.6);
+            beta=std::min({target.beta,beta*1.6,std::pow(std::sqrt(beta)+spacing,2)});
         }
         parameters.push_back(target);
         warm_configs.resize(parameters.size()-1);warm_updates.resize(warm_configs.size());

@@ -105,6 +105,14 @@ export default function BenchmarkDashboard() {
     setAxes(classical ? { beta: '10', J1: '', J2: '', hx: '' } : defaultAxes);
     setMethods(classical ? ['premarked', 'canonical'] : Object.keys(names));
   }
+  const comparison = job && job.status === 'complete' ? jobs.find(candidate => candidate.id !== job.id && candidate.status === 'complete' &&
+    ['Lx', 'Ly', 'J0', 'beta', 'J1', 'J2', 'hx', 'seed', 'chains', 'n_therm', 'n_measure'].every(key => candidate.request[key] === job.request[key]) &&
+    (candidate.request.algorithms as string[]).every(method => !(job.request.algorithms as string[]).includes(method))) : null;
+  async function compare() {
+    if (!job || !comparison) return;
+    try { const { data } = await axios.post<Job>(`${API}/compare`, [job.id, comparison.id]); setJobs(previous => [data, ...previous]); setSelected(data.id); setJob(data); }
+    catch (error) { setError(errorMessage(error)); }
+  }
   const rows = job?.points.filter(p => p.axis === axis).sort((a, b) => a.x - b.x) || [];
   const point = rows[Math.min(pointIndex, Math.max(0, rows.length - 1))];
   const running = jobs.some(j => ['running', 'queued'].includes(j.status)) || (job && ['running', 'queued'].includes(job.status));
@@ -128,7 +136,7 @@ export default function BenchmarkDashboard() {
     <section className={`${box} flex flex-wrap gap-5 items-center justify-between`}>
       <div className="min-w-64 flex-1"><label className="text-xs text-slate-400 block mb-2">Saved local experiments</label><select aria-label="Saved experiment" className={input} value={selected} onChange={event => { setSelected(event.target.value); setPointIndex(0); }}>{!jobs.length && <option value="">No experiments yet</option>}{jobs.map(j => <option key={j.id} value={j.id}>{new Date(j.created).toLocaleString()} · {String(j.request.Lx)}×{String(j.request.Ly)} · {j.status} · {j.completed_runs}/{j.total_runs} chains</option>)}</select></div>
       {job && <div className="flex-1 min-w-64"><div className="flex justify-between text-sm mb-2"><span className={job.status === 'complete' ? 'text-emerald-400' : 'text-amber-300'}>{job.status.toUpperCase()}</span><span>{job.completed_runs} / {job.total_runs} chains</span></div><div className="h-1.5 rounded-full bg-slate-800 overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${100 * job.completed_runs / Math.max(1, job.total_runs)}%` }} /></div><p className="text-xs text-slate-400 mt-2">{job.message}</p></div>}
-      {job && <div className="flex gap-3 items-center">{['csv', 'json'].map(format => <a className="flex items-center gap-1 text-xs text-cyan-300" key={format} href={`${API}/${job.id}/export?format=${format}`}><Download size={14} />{format.toUpperCase()}</a>)}{['failed', 'cancelled', 'interrupted'].includes(job.status) && <button className="text-cyan-300 text-xs" disabled={!!running} onClick={() => void axios.post<Job>(`${API}/${job.id}/resume`).then(response => setJob(response.data)).catch(error => setError(errorMessage(error)))}>Resume stored chains</button>}{['running', 'queued'].includes(job.status) && <button className="text-red-300 text-xs flex gap-1" onClick={() => void axios.post(`${API}/${job.id}/cancel`).catch(error => setError(errorMessage(error)))}><Square size={13} />Cancel</button>}</div>}
+      {job && <div className="flex gap-3 items-center">{comparison && <button className="text-purple-300 text-xs" onClick={() => void compare()}>Compare saved schedules</button>}{['csv', 'json'].map(format => <a className="flex items-center gap-1 text-xs text-cyan-300" key={format} href={`${API}/${job.id}/export?format=${format}`}><Download size={14} />{format.toUpperCase()}</a>)}{['failed', 'cancelled', 'interrupted'].includes(job.status) && <button className="text-cyan-300 text-xs" disabled={!!running} onClick={() => void axios.post<Job>(`${API}/${job.id}/resume`).then(response => setJob(response.data)).catch(error => setError(errorMessage(error)))}>Resume stored chains</button>}{['running', 'queued'].includes(job.status) && <button className="text-red-300 text-xs flex gap-1" onClick={() => void axios.post(`${API}/${job.id}/cancel`).catch(error => setError(errorMessage(error)))}><Square size={13} />Cancel</button>}</div>}
     </section>
     {!job && <section className={`${box} text-center py-12`}><Activity className="mx-auto text-cyan-400 mb-4" /><p>Start a benchmark to populate ED comparisons and measured QMC diagnostics.</p></section>}
     {job && <>

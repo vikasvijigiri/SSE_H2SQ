@@ -114,8 +114,31 @@ def worker(token):
         temporary = STATE.with_suffix(".tmp")
         temporary.write_text(json.dumps(state))
         temporary.replace(STATE)
-        while not stop_file.exists() and all(p.poll() is None for p in processes):
-            heartbeat.touch()
+        restarts = {name: 0 for name in commands}
+        while not stop_file.exists():
+            for index, (name, command) in enumerate(commands.items()):
+                code = processes[index].poll()
+                if code is not None:
+                    restarts[name] += 1
+                    print(f"{name} exited with code {code}; restarting (attempt {restarts[name]}).", flush=True)
+                    time.sleep(min(10, .5 * 2**min(restarts[name]-1, 5)))
+                    if stop_file.exists():
+                        break
+                    processes[index] = subprocess.Popen(command, cwd=ROOT / ("frontend" if name == "frontend" else "backend"), stdout=logs[index], stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                    state["children"] = [process.pid for process in processes]
+                    for attempt in range(20):
+                        try:
+                            temporary.write_text(json.dumps(state))
+                            temporary.replace(STATE)
+                            break
+                        except PermissionError:
+                            if attempt == 19:
+                                raise
+                            time.sleep(.05)
+            try:
+                heartbeat.touch()
+            except PermissionError:
+                pass  # A transient Windows scanner lock must not stop services.
             time.sleep(0.5)
     finally:
         for process in processes:

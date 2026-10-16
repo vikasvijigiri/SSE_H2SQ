@@ -70,7 +70,7 @@ int main(int argc,char** argv) {
     update.spatial_premarking=std::string(argv[3])!="vertex";
     update.canonical_enabled=std::string(argv[3])=="canonical";
     std::unique_ptr<SSETempering> tempering;
-    if(std::string(argv[3])=="tempered")tempering=std::make_unique<SSETempering>(p,cfg,update,rng);
+    if(std::string(argv[3])=="tempered")tempering=std::make_unique<SSETempering>(p,g,cfg,update,rng);
     long long configuration_checks=0;
     for(int step=0;step<p.n_therm;++step){
         if(tempering)tempering->sweep(g,rng,true);
