@@ -2,6 +2,8 @@
 *
 !*/
 !.gitignore
+!/.editorconfig
+!/.gitattributes
 !*.py
 !*.cpp
 !*.c
@@ -22,7 +24,6 @@
 !/frontend/tsconfig.json
 !/backend/pyrightconfig.json
 !/backend/requirements.txt
-!/tsconfig.json
 # App icons are text-based SVG source required by the interface.
 !/frontend/public/*.svg
 # Always exclude documents, historical runs and generated/vendor code.
@@ -116,3 +117,6 @@
 [nN]otes/
 # Dependency manifest is required to install the code.
 !/backend/requirements.txt
+
+# Machine-specific compilation databases stay local.
+compile_commands.json
