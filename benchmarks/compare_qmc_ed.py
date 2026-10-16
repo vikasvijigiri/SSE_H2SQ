@@ -6,7 +6,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import requests, json
 
-API = "http://127.0.0.1:8001/api"
+API = "http://127.0.0.1:8000/api"
 
 TESTS = [
     {"name": "J0+J1 only",   "J0": 1.0, "J1": 0.3, "J2": 0.0,   "J3": 0.0, "hx": 0.0},
