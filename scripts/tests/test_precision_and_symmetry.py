@@ -92,6 +92,21 @@ class PrecisionTests(unittest.TestCase):
         # it must not be forced to follow an exact 1/sqrt(N) trajectory.
         self.assertAlmostEqual(last,1/np.sqrt(144000),delta=.25/np.sqrt(144000))
 
+    def test_cutoff_moment_bounds_cover_explicit_conditioned_poisson_trace(self):
+        from app.services.benchmark import sampling_checks
+        from scipy.stats import poisson
+        import math
+        mu,cutoff,shift,beta,n=7.,12,3.,2.,4
+        run=dict(operator_cutoff=cutoff,norm_mean_bound=mu,energy_shift_total=shift,inverse_temperature=beta,spins=n,cutoff_saturations=0)
+        summary=dict(retained_samples=1000,observables={key:{'status':'checks passed'} for key in ['E','E2','E4']})
+        sampling_checks(summary,[run],'canonical')
+        probabilities=poisson.pmf(np.arange(cutoff+1),mu);probabilities/=probabilities.sum()
+        for power,key in [(1,'E'),(2,'E2'),(4,'E4')]:
+            values=[sum(math.comb(power,k)*shift**(power-k)*(-1)**k*math.prod(count-j for j in range(k))/beta**k for k in range(power+1))/n**power for count in range(cutoff+1)]
+            actual=abs(float(probabilities@values)-((shift-mu/beta)/n)**power)
+            self.assertLessEqual(actual,summary['sse_moment_bias_bounds'][key])
+        self.assertEqual(summary['validation_status'],'review')
+
     @unittest.skipUnless(shutil.which('g++'),'C++ compiler unavailable')
     def test_piecewise_path_estimator_matches_explicit_cyclic_binomial_average(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'.cache') as folder:
@@ -101,6 +116,21 @@ class PrecisionTests(unittest.TestCase):
             subprocess.run(command,cwd=ROOT,check=True,capture_output=True)
             error=float(subprocess.check_output([str(exe)],text=True))
             self.assertLess(error,2e-12)
+
+    @unittest.skipUnless(shutil.which('g++'),'C++ compiler unavailable')
+    def test_grouped_event_times_have_uniform_order_statistic_moments(self):
+        import json
+        with tempfile.TemporaryDirectory(dir=ROOT/'.cache') as folder:
+            exe=Path(folder)/('order.exe' if os.name=='nt' else 'order')
+            command=['g++','-O2','-std=c++17','backend/benchmarks/order_statistics_contract.cpp','-o',str(exe)]
+            if os.name=='nt':command+=['-static-libgcc','-static-libstdc++']
+            subprocess.run(command,cwd=ROOT,check=True,capture_output=True)
+            data=json.loads(subprocess.check_output([str(exe)],text=True))
+        self.assertTrue(data['ordered'])
+        ranks=np.asarray([2,7,15]);expected_mean=ranks/24
+        covariance=np.minimum(ranks[:,None],ranks[None,:])*(24-np.maximum(ranks[:,None],ranks[None,:]))/(24**2*25)
+        np.testing.assert_array_less(np.abs(np.asarray(data['means'])-expected_mean),6*np.sqrt(np.diag(covariance)/data['samples']))
+        np.testing.assert_allclose(data['covariance'],covariance,rtol=.12,atol=0)
 
 
 class PoolingTests(unittest.TestCase):
@@ -170,8 +200,22 @@ class SiteSymmetryTests(unittest.TestCase):
                 self.assertTrue(all(count>0 for count in metadata['site_symmetry_orbit_counts']))
                 self.assertEqual(metadata['cutoff_saturations'],0)
                 self.assertGreaterEqual(metadata['configuration_checks'],14)
+                self.assertEqual(metadata['local_skip_probability'],.01)
+                self.assertGreater(metadata['diagonal_skips'],0)
+                self.assertGreater(metadata['canonical_skips'],0)
+                from scipy.stats import poisson
+                mu=metadata['norm_mean_bound']
+                self.assertGreaterEqual(metadata['operator_cutoff'],int(np.ceil(mu+12*np.sqrt(mu+1)+32)))
+                self.assertLess(poisson.sf(metadata['operator_cutoff'],mu),1e-20)
             result=summarize([trace for trace,_ in runs],params)
+            from app.services.benchmark import sampling_checks
+            sampling_checks(result,[metadata for _,metadata in runs],'symmetry')
+            self.assertLess(result['sse_cutoff_tail_bound'],1e-20)
+            self.assertTrue(all(value<1e-20 for value in result['sse_moment_bias_bounds'].values()))
         reference=exact_reference(params)
+        for _,metadata in runs:
+            actual=params['beta']*(metadata['energy_shift_total']-params['Lx']*params['Ly']*reference['ground_energy_per_spin'])
+            self.assertLessEqual(actual,metadata['norm_mean_bound']+1e-10)
         for key in ['E','mz2','ice','stripe2','polar2','ct0','ct4','chi_stag','chi_polar']:
             observed=result['observables'][key]
             self.assertLess(abs(observed['mean']-reference['values'][key]),8*observed['error']+2e-4,msg=key)

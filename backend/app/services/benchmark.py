@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -19,6 +20,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 import scipy
+from scipy.stats import poisson
 from pydantic import BaseModel, Field, model_validator
 
 from .physics_model import exact_reference, MODEL_VERSION
@@ -232,8 +234,8 @@ def execute(job, request, cancelled):
                     summary["measurement_seconds"] = sum(row["measurement_seconds"] for row in metadata)
                     summary["total_seconds"] = sum(row["wall_seconds"] for row in metadata)
                     summary["update_seconds"] = {stage: sum(row["update_seconds"].get(stage,0.) for row in metadata) for stage in ("diagonal", "cluster", "gauge", "canonical","symmetry")}
-                    compare_reference(summary, point["ed"])
                     sampling_checks(summary,metadata,algorithm)
+                    compare_reference(summary, point["ed"])
                     if len(chains)>=8:
                         summary["error_scaling"]=precision_history(chains,params,metadata,algorithm,point["ed"],summary)
                     point["methods"][algorithm] = summary
@@ -272,6 +274,7 @@ async def start_job(request):
     job = {"id": identity, "created": datetime.now(timezone.utc).isoformat(), "status": "queued", "request": request.model_dump(), "completed_runs": 0, "total_runs": len(unique)*len(request.algorithms)*request.chains, "points": [], "message": "Queued", "provenance": run_provenance, "methods": METHODS, "observables": OBSERVABLES, "citations": [{"title": "Biswas & Damle: plaquette clusters and premarking", "url": "https://arxiv.org/abs/1812.05326"}, {"title": "Hukushima & Nemoto: exchange Monte Carlo", "url": "https://arxiv.org/abs/cond-mat/9512035"}, {"title": "Wolff: correlated-sample error analysis", "url": "https://arxiv.org/abs/hep-lat/0306017"}], "definitions": {"hamiltonian": "-J0 sum A + J1 sum(s0*s2+s1*s3) + J2 sum tilde(Pa).tilde(Pb) - hx sum sigma_x", "dipoles": "Cyclic (s0,s1,s2,s3); tilde Px=(s0-s1-s2+s3)/4, tilde Py=(s0+s1-s2-s3)/4; Pp=(-1)^x tilde Pp. Neighbor signs are opposite, so -J2 Pa.Pb equals +J2 tilde Pa.tilde Pb.", "ed_errors": "Complete finite-system ED has zero sampling error. Eigenpair residual is reported separately; no invented stochastic ED error bars.", "qmc_errors": "One standard error; maximum of correlation-aware, block-jackknife and independent-chain estimates. Review flagged points before publication.", "tempering": "Temperature ladder starts at beta<=0.25/max(1,|couplings|). Adjacent sqrt(beta) spacing<=0.7/sqrt(G_bound), also ratio<=1.6, with at most 64 replicas. G_bound is a conservative expansion-order density bound. Actual overlap and round trips must still be checked. Equal padding lengths frozen after thermalization; exchange acceptance=min(1,(beta_i/beta_j)^(n_j-n_i)). Odd/even exchanges every ten sweeps. Measured round trips and per-edge acceptance are recorded; tune the ladder if overlap is poor.", "autocorrelation": "Complete update schedules are stationary kernels. Individual diagonal/cluster steps are timed, not assigned misleading isolated-chain autocorrelation times.", "stripe": "m_q=sum sigma_z exp(i q.r)/(2N); stripe2=m_(pi,0)^2+m_(0,pi)^2; Q=0.5[1-<stripe2^2>/(3<stripe2>^2)].", "ice": "rho/Np=(4 f_ice-1)/3", "susceptibility": "Diagonal Kubo responses use imaginary-time averages; equal-time beta*variance is not substituted at nonzero field.", "scope": "One layer, J3=0, periodic even checkerboard. One-factor-at-a-time sweeps; small-system validation does not establish thermodynamic phase boundaries."}}
     job["citations"].extend([{"title":"Sandvik: computational studies and improved estimators","url":"https://arxiv.org/abs/1101.3281"},{"title":"Sandvik: SSE estimators, equations 24 and 27","url":"https://arxiv.org/abs/1909.10591"}])
     job["definitions"].update({"improved_estimators":"All nonidentity propagation indices are averaged for diagonal moments. Exact SSE Kubo sums replace random time embeddings. Dipole c(tau) integrates binomial time separations and cyclic origins analytically. Boundary estimates are retained for measured SE comparisons.","site_symmetry":"Independent flips of all even/odd SITE-parity spins generate an exact Z2 x Z2 symmetry, distinct from molecular A/B. J0 has two sites of each parity; retained J1/J2/J3 bonds join equal parities; transverse operators commute with the flips. Each of four orbit elements is chosen with probability 1/4, preserving every SSE matrix element and giving an acceptance-one reversible update. Runtime geometry checks and exhaustive shifted-weight tests verify its applicability. It supplements premarked clusters and worldline Metropolis; it is not a proof of rapid mixing between every inequivalent sector.","ed_errors":"ED has zero sampling error. 4x4 quantum references retain every eigenstate in the partition function and static observables. Lehmann responses retain all intermediate states linked to retained thermal endpoints; an exact-probability thermal-tail bound and eigenpair residual are reported separately.","scope":"One 2D periodic even checkerboard layer, J3=0. Dense complete ED up to 10 spins; full symmetry-resolved ED on 4x4. A finite nonzero-coupling grid does not validate a continuum of parameters or thermodynamic phase boundaries."})
+    job["definitions"].update({"ergodicity": "For the certified schedule, each diagonal slot and whole-worldline proposal has a 1% identity probability. Any valid finite-padding configuration can reach an hx-only string by removing diagonal operators while skipping other slots; cluster flips can then make every worldline constant, and removal reaches the empty string. Free spins and the reverse moves reach every positive-weight configuration. Positive identity probabilities give aperiodicity. This is a constructive finite-support ergodicity argument, not a uniform mixing-time bound.", "SSE_cutoff": "For K=C-H=sum of positive semidefinite shifted operators, ||K||<=G. The expansion tail is bounded by P(Poisson(beta*G)>M). The certified schedule initializes M>=ceil(beta*G+12*sqrt(beta*G+1)+32), allows thermal growth, and freezes padding during measurements. Tail-probability and energy-moment bias bounds are recorded separately from sampling SE."})
     try:
         archive_sources(job)
         save_job(job)
@@ -374,8 +377,11 @@ def compare_reference(summary, reference):
         observation["difference"] = observation["mean"]-target if observation["mean"] is not None and target is not None else None
         observation["pull"] = observation["difference"]/error if error is not None and error > 0 and observation["difference"] is not None else None
         observation["ess_per_second"] = observation.get("ess")/summary["total_seconds"] if observation.get("ess") is not None else None
-        bound=reference.get("absolute_error_bounds",{}).get(key,0.)
-        observation["reference_absolute_error_bound"]=bound
+        reference_bound=reference.get("absolute_error_bounds",{}).get(key,0.)
+        sse_bound=summary.get("sse_moment_bias_bounds",{}).get(key)
+        bound=reference_bound+(sse_bound or 0.)
+        observation["reference_absolute_error_bound"]=reference_bound
+        observation["sse_absolute_bias_bound"]=sse_bound
         if observation["pull"] is not None and abs(observation["difference"]) > 4*error+bound:
             flag = "ED discrepancy exceeds 4 SE: sampling/systematic review required"
             if flag not in observation.setdefault("flags", []):
@@ -394,6 +400,28 @@ def trace_location(identity,point,method,chain):
 
 def sampling_checks(summary,runs,algorithm):
     flags=[]
+    cutoff_bounds=[]
+    moment_bounds={key:[] for key in ("E","E2","E4")}
+    for run in runs:
+        if "operator_cutoff" not in run or "norm_mean_bound" not in run:continue
+        cutoff,mu=int(run["operator_cutoff"]),float(run["norm_mean_bound"])
+        tail=float(poisson.sf(cutoff,mu))
+        run["sse_tail_probability_bound"]=tail if math.isfinite(tail) else None
+        if not math.isfinite(tail):
+            flags.append("invalid SSE cutoff-tail bound");continue
+        cutoff_bounds.append(tail)
+        if tail>1e-20:
+            flags.append("SSE cutoff-tail bound exceeds 1e-20")
+        if tail<1 and all(key in run for key in ("energy_shift_total","inverse_temperature","spins")):
+            beta,n=run["inverse_temperature"],run["spins"]
+            shift=abs(run["energy_shift_total"])
+            delta={k:mu**k*(float(poisson.sf(cutoff-k,mu))+tail)/(1-tail) for k in range(1,5)}
+            run["sse_moment_bias_bounds"]={}
+            for power,name in ((1,"E"),(2,"E2"),(4,"E4")):
+                value=sum(math.comb(power,k)*shift**(power-k)*delta[k]/beta**k for k in range(1,power+1))/n**power
+                moment_bounds[name].append(value);run["sse_moment_bias_bounds"][name]=value
+    summary["sse_cutoff_tail_bound"]=max(cutoff_bounds) if len(cutoff_bounds)==len(runs) else None
+    summary["sse_moment_bias_bounds"]={name:max(values) for name,values in moment_bounds.items() if len(values)==len(runs)}
     if any(row["cutoff_saturations"] for row in runs):
         flags.append("operator cutoff reached: rerun with more thermalization/headroom")
     if algorithm=="tempered":
@@ -402,6 +430,8 @@ def sampling_checks(summary,runs,algorithm):
         if any(any(n>=100 and a/n<.02 for n,a in zip(row.get("swap_attempts",[]),row.get("swap_accepted",[]))) for row in runs):
             flags.append("temperature ladder bottleneck: exchange acceptance below 2 percent")
     if algorithm=="symmetry":
+        if any(not 0<row.get("local_skip_probability",0)<1 for row in runs):
+            flags.append("positive local laziness missing from the certified schedule")
         if any(len(row.get("site_symmetry_orbit_counts",[]))!=4 or min(row.get("site_symmetry_orbit_counts",[0]))==0 for row in runs):
             flags.append("site-symmetry orbit activity missing")
         if sum(sum(row.get("site_symmetry_orbit_counts",[])) for row in runs)!=summary["retained_samples"]:
@@ -420,8 +450,8 @@ def precision_history(traces,params,runs,method,reference,full):
         current=full if count==len(traces) else summarize(traces[:count],params)
         if count!=len(traces):
             current["total_seconds"]=sum(r["wall_seconds"] for r in runs[:count])
-            compare_reference(current,reference)
             sampling_checks(current,runs[:count],method)
+            compare_reference(current,reference)
         history.append({"chains":count,"samples":sum(len(t) for t in traces[:count]),
             "observables":{name:{k:o.get(k) for k in ("mean","error","tau_int","ess","rhat","status")} for name,o in current["observables"].items()}})
     for row in history:
@@ -491,8 +521,8 @@ def pool_jobs(identities):
             summary.update(runs=runs,measurement_seconds=sum(r["measurement_seconds"] for r in runs),
                            total_seconds=sum(r["wall_seconds"] for r in runs),
                            update_seconds={stage:sum(r["update_seconds"].get(stage,0.) for r in runs) for stage in ("diagonal","cluster","gauge","canonical","symmetry")})
-            compare_reference(summary,point["ed"])
             sampling_checks(summary,runs,method)
+            compare_reference(summary,point["ed"])
             summary["error_scaling"]=precision_history(traces,point["params"],runs,method,point["ed"],summary)
             methods[method]=summary
             max_chains=max(max_chains,len(traces));completed+=len(traces)
@@ -508,11 +538,11 @@ def pool_jobs(identities):
 def csv_result(job):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["axis", "x", "Lx", "Ly", "beta", "J0", "J1", "J2", "hx", "algorithm", "observable", "ED", "ED_sampling_SE", "QMC", "QMC_SE", "tau_int_sweeps", "ESS", "Rhat", "status", "tau_SE_estimate", "ESS_per_summed_chain_second", "flags","ED_Lehmann_tail_absolute_bound"])
+    writer.writerow(["axis", "x", "Lx", "Ly", "beta", "J0", "J1", "J2", "hx", "algorithm", "observable", "ED", "ED_sampling_SE", "QMC", "QMC_SE", "tau_int_sweeps", "ESS", "Rhat", "status", "tau_SE_estimate", "ESS_per_summed_chain_second", "flags","ED_Lehmann_tail_absolute_bound","QMC_SSE_moment_absolute_bias_bound"])
     for point in job["points"]:
         for method, summary in point["methods"].items():
             for key, value in summary["observables"].items():
-                writer.writerow([point["axis"], point["x"], *[point["params"][name] for name in ("Lx", "Ly", "beta", "J0", "J1", "J2", "hx")], method, key, point["ed"]["values"].get(key), 0, value["mean"], value["error"], value.get("tau_int"), value.get("ess"), value.get("rhat"), value["status"], value.get("tau_error"), value.get("ess_per_second"), "; ".join(value.get("flags", [])),point["ed"].get("absolute_error_bounds",{}).get(key,0.)])
+                writer.writerow([point["axis"], point["x"], *[point["params"][name] for name in ("Lx", "Ly", "beta", "J0", "J1", "J2", "hx")], method, key, point["ed"]["values"].get(key), 0, value["mean"], value["error"], value.get("tau_int"), value.get("ess"), value.get("rhat"), value["status"], value.get("tau_error"), value.get("ess_per_second"), "; ".join(value.get("flags", [])),point["ed"].get("absolute_error_bounds",{}).get(key,0.),value.get("sse_absolute_bias_bound")])
     return output.getvalue()
 
 
@@ -575,6 +605,8 @@ def figure_result(job, axis, observable, format, quantity="mean"):
     axes.grid(alpha=.15)
     if quantity == "mean":
         axes.plot([p["x"] for p in points], [p["ed"]["values"].get(observable) for p in points], "kD--", markersize=4, label="Complete ED (sampling SE = 0)")
+        if observable=="E" and any(p["ed"].get("ground_energy_per_spin") is not None for p in points):
+            axes.plot([p["x"] for p in points],[p["ed"].get("ground_energy_per_spin") for p in points],color="#6b7280",linestyle=":",label="ED ground energy")
     elif quantity == "difference":
         axes.axhline(0, color="black", linestyle="--", linewidth=1)
     colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7","#E69F00"]

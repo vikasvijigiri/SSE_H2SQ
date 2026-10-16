@@ -71,6 +71,7 @@ int main(int argc,char** argv) {
     update.spatial_premarking=std::string(argv[3])!="vertex";
     update.canonical_enabled=std::string(argv[3])=="canonical" || std::string(argv[3])=="symmetry";
     update.symmetry_enabled=std::string(argv[3])=="symmetry";
+    update.local_skip_probability=update.symmetry_enabled?.01:0.;
     std::unique_ptr<SSETempering> tempering;
     if(std::string(argv[3])=="tempered")tempering=std::make_unique<SSETempering>(p,g,cfg,update,rng);
     long long configuration_checks=0;
@@ -96,11 +97,8 @@ int main(int argc,char** argv) {
         non_global+=(flips>0 && flips<p.Ns);saturated+=(cfg.n_ops==cfg.max_ops);
         Observables obs;obs.accumulate(cfg,p,g);
         auto base=measure(cfg.spins.spin,p,g);
-        std::vector<double> times;
-        times.reserve(cfg.n_ops);
-        if(p.hx!=0)for(int i=0;i<cfg.n_ops;++i)times.push_back(p.beta*measurement_rng.uniform());
-        std::sort(times.begin(),times.end());
         std::vector<std::pair<double,int>> events;
+        std::vector<int> event_ranks;
         int active=0, nx=0;
         // Sandvik's propagation-index average, Eq. (24), and exact Kubo
         // sums, Eq. (27). Recompute only when an off-diagonal event changes
@@ -110,25 +108,28 @@ int main(int argc,char** argv) {
         int segment_begin=0;
         double am=0,am2=0,am4=0,aparity=0,aice=0,astripe2=0,astripe4=0;
         double apolar2=0,apolar4=0,apx=0,apy=0;
-        auto add_state=[&](const DiagonalMeasurement& value){
-            am+=value.m;am2+=value.m*value.m;am4+=std::pow(value.m,4);
-            aparity+=value.parity;aice+=value.ice;
-            astripe2+=value.stripe2;astripe4+=value.stripe2*value.stripe2;
-            apolar2+=value.polar2;apolar4+=value.polar2*value.polar2;
-            apx+=value.px;apy+=value.py;
+        auto add_state=[&](const DiagonalMeasurement& value,int copies){
+            am+=copies*value.m;am2+=copies*value.m*value.m;am4+=copies*std::pow(value.m,4);
+            aparity+=copies*value.parity;aice+=copies*value.ice;
+            astripe2+=copies*value.stripe2;astripe4+=copies*value.stripe2*value.stripe2;
+            apolar2+=copies*value.polar2;apolar4+=copies*value.polar2*value.polar2;
+            apx+=copies*value.px;apy+=copies*value.py;
         };
         for(const auto& op:cfg.op_string)if(op.type!=OpType::Identity){
-            add_state(at_index);
             if(op.type==OpType::OffDiagonal){
-                ++nx;events.push_back({times[active],op.index});
+                add_state(at_index,active+1-segment_begin);
+                ++nx;events.push_back({0.,op.index});event_ranks.push_back(active+1);
                 path.push_back({segment_begin,active+1,at_index.molecular_x});
                 segment_begin=active+1;
                 propagated[op.index]*=-1;at_index=measure(propagated,p,g);
             }
             ++active;
         }
-        if(!active)add_state(base);
+        if(!active)add_state(base,1);
+        else if(segment_begin<active)add_state(at_index,active-segment_begin);
         if(segment_begin<active || !active)path.push_back({segment_begin,active,at_index.molecular_x});
+        auto event_times=sse_selected_event_times(active,event_ranks,measurement_rng);
+        for(size_t i=0;i<events.size();++i)events[i].first=p.beta*event_times[i];
         auto improved_ct=sse_path_correlation(path,active);
         double count=std::max(1,active);
         double exact_bar_m2=(am*am+am2)/(count*(count+1));
@@ -148,6 +149,8 @@ int main(int argc,char** argv) {
         out<<'\n';
     }
     double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    Observables final_observable;final_observable.accumulate(cfg,p,g);
+    double energy_shift_total=final_observable.E*p.Ns+cfg.n_ops/p.beta;
     if(tempering)for(const auto& u:tempering->warm_updates){
         update.diagonal_seconds+=u.diagonal_seconds;update.cluster_seconds+=u.cluster_seconds;
         update.gauge_seconds+=u.gauge_seconds;update.canonical_seconds+=u.canonical_seconds;
@@ -162,6 +165,6 @@ int main(int argc,char** argv) {
     if(tempering)for(size_t i=0;i<tempering->accepted.size();++i)std::cout<<(i?",":"")<<tempering->accepted[i];
     std::cout<<"],\"site_symmetry_orbit_counts\":[";
     for(int i=0;i<4;++i)std::cout<<(i?",":"")<<(update.site_symmetry?update.site_symmetry->orbit_counts[i]:0);
-    std::cout<<"],\"estimator\":\"propagation-index average, exact SSE Kubo sums and cyclic/binomial dipole correlations (Sandvik 2019, equations 24 and 27)\",";
+    std::cout<<"],\"operator_cutoff\":"<<cfg.max_ops<<",\"energy_shift_total\":"<<energy_shift_total<<",\"norm_mean_bound\":"<<SSESiteSymmetry::expansion_bound(p,g)<<",\"inverse_temperature\":"<<p.beta<<",\"spins\":"<<p.Ns<<",\"local_skip_probability\":"<<update.local_skip_probability<<",\"diagonal_skips\":"<<update.diagonal_skips<<",\"canonical_skips\":"<<update.canonical_skips<<",\"estimator\":\"propagation-index average, exact SSE Kubo sums and cyclic/binomial dipole correlations (Sandvik 2019, equations 24 and 27)\",";
     std::cout<<std::setprecision(17)<<"\"measurement_seconds\":"<<elapsed<<",\"configuration_checks\":"<<configuration_checks<<",\"non_global_moves\":"<<non_global<<",\"cutoff_saturations\":"<<saturated<<",\"update_seconds\":{\"diagonal\":"<<update.diagonal_seconds<<",\"cluster\":"<<update.cluster_seconds<<",\"gauge\":"<<update.gauge_seconds<<",\"canonical\":"<<update.canonical_seconds<<",\"symmetry\":"<<update.symmetry_seconds<<"},\"canonical_attempts\":"<<update.canonical_attempts<<",\"canonical_accepted\":"<<update.canonical_accepted<<"}\n";
 }

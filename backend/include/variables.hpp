@@ -143,6 +143,7 @@ public:
       dist(0.0, 1.0) {}
 
     inline double uniform() { return dist(gen); }
+    inline double gamma(double shape) { return std::gamma_distribution<double>(shape,1.0)(gen); }
 };
 
 #endif

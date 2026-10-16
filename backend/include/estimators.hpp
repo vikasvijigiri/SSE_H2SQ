@@ -6,6 +6,24 @@
 #include <cmath>
 #include <map>
 #include <vector>
+#include <stdexcept>
+
+// Selected order statistics of n uniform operator times. Grouping their
+// Dirichlet(1,...,1) spacings gives integer-shape gamma gaps, so only the
+// off-diagonal event ranks need to be sampled for the boundary audit.
+template<class Random>
+std::vector<double> sse_selected_event_times(int n,const std::vector<int>& ranks,Random& rng){
+    if(ranks.empty())return {};
+    std::vector<double> gaps;gaps.reserve(ranks.size()+1);
+    int previous=0;double total=0.;
+    for(int rank:ranks){
+        if(rank<=previous || rank>n)throw std::runtime_error("Invalid SSE event rank.");
+        double value=rng.gamma(rank-previous);gaps.push_back(value);total+=value;previous=rank;
+    }
+    total+=rng.gamma(n+1-previous);
+    double cumulative=0.;for(auto& value:gaps){cumulative+=value;value=cumulative/total;}
+    return gaps;
+}
 
 // Exact conditional binomial average of cyclic propagation-index dipole
 // correlations. Integrating it over tau gives Sandvik's Eq. (27).

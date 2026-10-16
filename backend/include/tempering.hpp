@@ -48,7 +48,7 @@ public:
         }
         configs.push_back(&cold);updates.push_back(&cold_update);
         // Preserve the original tempering schedule as a controlled comparison.
-        for(auto* u:updates){u->spatial_premarking=true;u->canonical_enabled=true;u->symmetry_enabled=false;}
+        for(auto* u:updates){u->spatial_premarking=true;u->canonical_enabled=true;u->symmetry_enabled=false;u->local_skip_probability=0.;}
         labels.resize(configs.size());std::iota(labels.begin(),labels.end(),0);
         journey.assign(configs.size(),0);attempts.assign(configs.size()-1,0);accepted=attempts;
     }
