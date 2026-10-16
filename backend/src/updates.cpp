@@ -22,7 +22,12 @@ void SSEUpdates::sweep(SSEConfig &cfg, const Parameters &prm,
     site_symmetry->ensure_cutoff(cfg);
   }
   auto start = std::chrono::steady_clock::now();
+  std::vector<int> initial_spins;
+  if(open_boundaries)initial_spins=cfg.spins.spin;
   diagonal_update(cfg, prm, geom, rng);
+  // The scan propagates the boundary state. Thermal closure restores it
+  // automatically; an open projector must retain its original starting end.
+  if(open_boundaries)cfg.spins.spin=std::move(initial_spins);
   auto diagonal_end = std::chrono::steady_clock::now();
 #ifdef SSE_DEBUG
   dbg_print_op_string(cfg, prm, geom);
@@ -537,7 +542,7 @@ void SSEUpdates::build_vertex_list(SSEConfig &cfg, const Geometry &geom,
 
   // Close periodic boundary conditions
   for (int s = 0; s < N; ++s) {
-    if (first_leg[s] != -1) {
+    if (!open_boundaries && first_leg[s] != -1) {
       linked_leg[last_leg[s]] = first_leg[s];
       linked_leg[first_leg[s]] = last_leg[s];
     }
@@ -550,6 +555,13 @@ void SSEUpdates::check_integrity() {
   const int n = static_cast<int>(linked_leg.size());
   for (int l = 0; l < n; ++l) {
     int next = linked_leg[l];
+    if(open_boundaries && next==-1){
+      int site=leg_site[l];
+      if(first_leg[site]!=l && last_leg[site]!=l){
+        std::cerr<<"Integrity Error: unmatched interior projector leg\n";std::abort();
+      }
+      continue;
+    }
     if (next < 0 || next >= n) {
       std::cerr << "Integrity Error: Leg " << l << " links to invalid " << next
                 << "\n";
@@ -578,6 +590,7 @@ void SSEUpdates::propagate_spins(SSEConfig &cfg) {
 
 void SSEUpdates::check_spin_consistency(const SSEConfig &cfg,
                                         const Geometry & /*geom*/) {
+  if(open_boundaries)return; // Free endpoints; runner validates every weight.
   std::vector<int> current_spins = cfg.spins.spin;
   const std::vector<int> &initial_spins = cfg.spins.spin;
 

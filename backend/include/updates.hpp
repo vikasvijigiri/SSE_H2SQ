@@ -17,6 +17,8 @@ public:
     bool spatial_premarking = true;
     bool canonical_enabled = true;
     bool symmetry_enabled = true;
+    // Uniform |+x> trial amplitudes at both ends, rather than a thermal trace.
+    bool open_boundaries = false;
     double local_skip_probability = .01;
     long long diagonal_skips=0,canonical_skips=0;
     double symmetry_seconds = 0.;

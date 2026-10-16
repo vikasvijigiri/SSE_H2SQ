@@ -93,5 +93,14 @@ $(DBG_TARGET): $(SRCS) $(wildcard ../include/*.hpp)
 
 .PHONY: benchmark
 benchmark: sse_benchmark$(EXE_EXT)
+
+.PHONY: projector
+projector: sse_projector$(EXE_EXT) emc_validation$(EXE_EXT)
+
+emc_validation$(EXE_EXT): ../benchmarks/emc.cpp ../src/variables.cpp $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/emc.cpp ../src/variables.cpp $(LDFLAGS) -o $@
+
+sse_projector$(EXE_EXT): ../benchmarks/projector.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/projector.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(LDFLAGS) -o $@
 sse_benchmark$(EXE_EXT): ../benchmarks/runner.cpp $(filter-out ../src/main.cpp,$(SRCS)) $(wildcard ../include/*.hpp)
 	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/runner.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(LDFLAGS) -o $@
