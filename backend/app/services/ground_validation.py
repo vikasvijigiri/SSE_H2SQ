@@ -400,6 +400,8 @@ def cancel(identity):
 
 async def resume(identity):
     job=get(identity)
+    if job.get('precision_extension'):
+        raise RuntimeError('Resume pooled precision collections through their frozen collector; generic resume cannot reconstruct their mixed-length retained runs.')
     with LOCK:
         if ACTIVE:raise RuntimeError('Another ground validation is active.')
         if job['status'] not in ('cancelled','failed','interrupted'):raise RuntimeError('Only stopped studies can resume.')
