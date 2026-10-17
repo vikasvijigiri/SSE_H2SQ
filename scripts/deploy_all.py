@@ -188,10 +188,19 @@ def up():
             return
         print("Restarting services to deploy current source.")
         stop()
+    # Windows may release a service socket shortly after its launcher exits.
+    # A bounded startup grace also covers an explicit stop/restart operation.
+    # Never terminate an unknown port owner.
+    release_deadline = time.monotonic() + 10
     for port in (8000, 5173):
-        with socket.socket() as connection:
-            if connection.connect_ex(("127.0.0.1", port)) == 0:
+        while True:
+            with socket.socket() as connection:
+                occupied = connection.connect_ex(("127.0.0.1", port)) == 0
+            if not occupied:
+                break
+            if time.monotonic() >= release_deadline:
                 raise RuntimeError(f"Port {port} is occupied by an unmanaged service. Stop it before deploying.")
+            time.sleep(.1)
     prepare()
     token = uuid.uuid4().hex
     options = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
