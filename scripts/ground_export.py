@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import statistics
 import sys
 import urllib.request
 
@@ -15,6 +16,13 @@ sys.path.insert(0,str(ROOT/'backend'))
 
 def number(value):
     return '--' if value is None else f'{value:.6g}'
+
+
+def tex_number(value):
+    text=number(value)
+    if 'e' not in text:return text
+    mantissa,exponent=text.split('e')
+    return mantissa+r'\times10^{'+str(int(exponent))+'}'
 
 
 def main():
@@ -37,7 +45,7 @@ def main():
         histogram=last['methods'].get('projector',{}).get('histogram',{}) if last else {}
         rows.append([point['id'],point['kind'],p['Lx'],p['Ly'],p['J0'],p['J1'],p['J2'],p['hx'],last['projection'] if last else None,point['verdict'],histogram.get('fidelity_ground'),histogram.get('tvd_ground'),histogram.get('missing_ground_weight'),'; '.join(point.get('reasons',[])) or point.get('reference_error','')])
         if not levels or not any(l['methods'] for l in levels):continue
-        choices=[(key,'mean') for key in PHYSICS_KEYS]
+        choices=[(key,'mean') for key in PHYSICS_KEYS+['E_count','E2','E4']]
         choices += [(key,quantity) for key in ['E','ct0','stripe2'] for quantity in ['sampling_difference','tau_int','precision']]
         if not point['kind'].startswith('classical'):choices += [('E','fidelity')]
         if histogram:choices += [('E',key) for key in ['state_infidelity','state_tvd','state_missing']]
@@ -68,14 +76,16 @@ def main():
     table=[r'\begin{longtable}{lrrrrrrl}',r'Case & $N$ & $J_1$ & $J_2$ & $h$ & $T/\beta$ & $F_{\rm QMC,0}$ & Verdict \\ \hline']
     for row in rows:table.append(' & '.join([row[0],str(row[2]*row[3]),*[number(row[i]) for i in [5,6,7,8,10]],row[9]])+r' \\')
     table.append(r'\end{longtable}');(folder/'tables/cases.tex').write_text('\n'.join(table),encoding='utf-8')
-    estimates=[r'\begin{longtable}{llrrl}',r'Case / method & Quantity & QMC $\pm$ SE & Ground / exact & Status \\ \hline\endhead']
+    estimates=[r'{\footnotesize\begin{longtable}{llrrl}',r'Case / method & Quantity & QMC $\pm$ SE & Ground / exact & Status \\ \hline\endhead']
     for point in job['points']:
         if not point['levels']:continue
         for method,summary in point['levels'][-1]['methods'].items():
-            for key in PHYSICS_KEYS:
+            for key in summary['observables']:
                 value=summary['observables'][key]
-                estimates.append(' & '.join([point['id']+'/'+method,key.replace('_',r'\_'),'$'+number(value['mean'])+r'\pm'+number(value['error'])+'$',number(value['ground_ed']),value['status']])+r' \\')
-    estimates.append(r'\end{longtable}');(folder/'tables/final-estimates.tex').write_text('\n'.join(estimates),encoding='utf-8')
+                estimate='$'+tex_number(value['mean'])+(r'\pm'+tex_number(value['error']) if value['error'] is not None else r'\;\mathrm{(SE\ unresolved)}')+'$'
+                reference='$'+tex_number(value['ground_ed'])+'$' if value['ground_ed'] is not None else '--'
+                estimates.append(' & '.join([point['id']+'/'+method,key.replace('_',r'\_'),estimate,reference,value['status']])+r' \\')
+    estimates.append(r'\end{longtable}}');(folder/'tables/final-estimates.tex').write_text('\n'.join(estimates),encoding='utf-8')
     (folder/'sections/figures.tex').write_text(''.join(figure_sections),encoding='utf-8')
     (folder/'sections/methods.tex').write_text(r'''\section{Hamiltonian and ground-state target}
 The periodic even checkerboard lattice uses Pauli variables $\sigma_i^z=\pm1$. The cyclic black-plaquette order is
@@ -89,6 +99,18 @@ The periodic even checkerboard lattice uses Pauli variables $\sigma_i^z=\pm1$. T
 The tilde dipoles omit the molecular B sign. Thus the displayed $+J_2$ term equals the manuscript's $-J_2\mathbf P_A\cdot\mathbf P_B$ with $\mathbf P_B=-\widetilde{\mathbf P}_B$. Directional periodic multiplicities are retained even when endpoint pairs coincide in narrow cells. Spin moments use $S^z=\sigma^z/2$; transverse magnetization uses Pauli $\sigma^x$ per spin. Ground response functions are outside this report's scope.
 
 We sample $\langle+|e^{-TH}|+\rangle$ with free imaginary-time endpoints, corresponding to the normalized pure state $e^{-TH/2}|+\rangle$. This is a projector, not a thermal trace. Uniform nonzero $h$ is gauged to $|h|$; the physical transverse estimator retains its sign. This product trial and open boundaries follow the established projector construction~\cite{sandvik2019}.
+
+The 12 required physical static quantities are energy, staggered second/fourth moments, transverse magnetization, plaquette product, ice-rule fraction, $\rho$, stripe second/fourth moments, polarization second/fourth moments, and the equal-time dipole quantity $c_{t0}$. Their definitions and normalizations are retained with the frozen study. Count energy, second/fourth energy moments and four raw estimators provide additional audits.
+
+For a sampled $z$ configuration, define
+\begin{align}
+ m_z&=\frac{1}{2N}\sum_{x,y}(-1)^{x+y}\sigma_{x,y}, &
+ s_2&=\left(\frac{\sum_{x,y}(-1)^x\sigma_{x,y}}{2N}\right)^2
+       +\left(\frac{\sum_{x,y}(-1)^y\sigma_{x,y}}{2N}\right)^2,\\
+ \widetilde P_{p,x}&=\tfrac14(\sigma_0-\sigma_1-\sigma_2+\sigma_3), &
+ \widetilde P_{p,y}&=\tfrac14(\sigma_0+\sigma_1-\sigma_2-\sigma_3).
+\end{align}
+Staggered moments are $\langle m_z^2\rangle,\langle m_z^4\rangle$; stripe moments are $\langle s_2\rangle,\langle s_2^2\rangle$. Physical dipoles are $\mathbf P_p=\eta_p\widetilde{\mathbf P}_p$ with $\eta_p=+1$ on A and $-1$ on B. Polarization moments use $p_2=|N_p^{-1}\sum_p\mathbf P_p|^2$ and $p_2^2$. The plaquette product is the mean four-spin product; $f_{\rm ice}$ is the fraction with $\sum_{i\in p}\sigma_i=0$ and $\rho=(4f_{\rm ice}-1)/3$. The measured $c_{t0}=N_p^{-1}\sum_p\langle\widetilde P_{p,x}^2\rangle$ is local, equal-time and x-component only. The transverse mean is $N^{-1}\sum_i\langle\sigma_i^x\rangle$. Energy moments are $\langle(H/N)^k\rangle$ for $k=1,2,4$.
 
 \section{Estimators and energy shifts}
 The central insertion index has exact conditional law $p\sim\mathrm{Binomial}(n,1/2)$. Diagonal estimators integrate constant propagation segments with these probabilities. The central off-diagonal event intensity is $(n/T)\mathrm{Binomial}(n-1,r-1;1/2)$ at event rank $r$, not the boundary-averaged total off-event count. At a fixed cluster graph, distinct-component field endpoints give conditional off probability $1/2$; same-component endpoints retain their actual off status, including frustrated contributions. Component-orientation averages give $\langle m^2\rangle_G=\sum_c a_c^2$ and $\langle m^4\rangle_G=3(\sum_c a_c^2)^2-2\sum_c a_c^4$. Model-specific formulas were checked against exhaustive component enumeration, following the improved-estimator principle~\cite{sandvik2011}. Raw estimator audits are retained.
@@ -108,7 +130,36 @@ Independent classical exchange Monte Carlo~\cite{hukushima1996} uses separately 
 Reported bars are one standard error. The SE is the maximum of blocked, per-run autocorrelation, and independent-run HC2 estimates. Rank/folded split $\widehat R$, ESS, block adequacy, complete-sweep autocorrelation and per-stage wall timings are retained. ESS/runtime divides by summed measured run wall times, including thermalization, and is not a CPU-time measurement. Autocorrelation is measured for the complete update composition, not isolated update kernels. Prefix four/eight-run comparisons retain SE increases. The frozen rule requires finite-ensemble agreement within four SE, requested precision, controlled projection bias, two long projection lengths, and state-distribution thresholds. These are review criteria, not simultaneous 100\% confidence bounds. Projection fidelity predicted by ED and sampled QMC-state fidelity are separate plots.
 ''',encoding='utf-8')
     counts={verdict:sum(p['verdict']==verdict for p in job['points']) for verdict in ['GO','NO GO']}
-    (folder/'sections/results.tex').write_text(r'\section{Frozen study and verdicts}'+'\n'+f'Study {job["id"]}; revision '+r'\texttt{'+job['provenance']['revision'][:12]+'}. '+f'{job["completed_runs"]} independent runs completed. '+r'Universal verdict: \textbf{NO GO}. Requested random-domain verdict: \textbf{'+job['verdict']['random_ground_domain']+'}. '+f'{counts["GO"]} cases pass their stated scope; {counts["NO GO"]} do not. '+r'Failed, stress and unsupported cases remain in the tables and figures. All individual quantities, diagnostics and reasons are in the accompanying CSV and JSON. These data support only the reported finite-cell claims.'+'\n'+r'\input{tables/cases.tex}'+'\n',encoding='utf-8')
+    summaries=[s for p in job['points'] for level in p['levels'] for s in level['methods'].values()]
+    observed=[v for s in summaries for v in s['observables'].values()]
+    stochastic=[v for v in observed if v['tau_int'] is not None]
+    ratios=[v['SE_ratio'] for p in job['points'] if p['levels'] for s in p['levels'][-1]['methods'].values() for history in s.get('precision_history',[])[-1:] for v in history['observables'].values() if v['SE_ratio'] is not None and v['tau_int'] is not None]
+    random=[p for p in job['points'] if p['label'].startswith('Random')]
+    evidence=dict(rows=sum(s['retained_samples'] for s in summaries),cases=counts,
+        random_passed=sum(p['verdict']=='GO' for p in random),random_total=len(random),
+        maximum_stochastic_ED_pull=max((abs(v['pull']) for v in stochastic if v['pull'] is not None),default=None),
+        maximum_rhat=max((v['rhat'] for v in stochastic if v['rhat'] is not None),default=None),
+        minimum_ess=min((v['ess'] for v in stochastic),default=None),
+        maximum_tau=max((v['tau_int'] for v in stochastic),default=None),
+        stochastic_SE_comparisons=len(ratios),stochastic_SE_decreased=sum(r<1 for r in ratios),
+        stochastic_SE_ratio_median=statistics.median(ratios) if ratios else None)
+    (folder/'metadata/validation-summary.json').write_text(json.dumps(evidence,indent=2,allow_nan=False),encoding='utf-8')
+    results=r'\section{Frozen study and verdicts}'+'\n'+f'Study {job["id"]}; revision '+r'\texttt{'+job['provenance']['revision'][:12]+'}. '+f'{job["completed_runs"]} independent runs and {evidence["rows"]:,} measured rows completed. '+r'Universal verdict: \textbf{NO GO}. Requested random-domain verdict: \textbf{'+job['verdict']['random_ground_domain']+'}. '+f'{counts["GO"]} cases pass their stated scope; {counts["NO GO"]} do not. '+r'Failed, stress and unsupported cases remain in the tables and figures. All individual quantities, diagnostics and reasons are in the accompanying CSV and JSON. These data support only the reported finite-cell claims.'+'\n\n'
+    if random:results+=f'{evidence["random_passed"]} of {evidence["random_total"]} simultaneous random-coupling cases pass all required checks. '
+    results+=f'The maximum finite-reference standardized residual among nonconstant estimators is {number(evidence["maximum_stochastic_ED_pull"])} SE. '+r'This alone is insufficient: sampling diagnostics fail even when mean residuals fit broad error bars. Deterministic conditional estimators have only floating-point residuals; dividing those by roundoff-scale SE is not a meaningful stochastic test. '
+    results+=f'The largest measured autocorrelation is {number(evidence["maximum_tau"])} full sweeps, minimum ESS {number(evidence["minimum_ess"])}, and maximum '+r'$\widehat R$ '+number(evidence['maximum_rhat'])+'. Long autocorrelation estimates in flagged runs remain unresolved.\n\n'
+    if ratios:results+=f'At the final projection/equilibrium length, SE decreases in {sum(r<1 for r in ratios)} of {len(ratios)} nonconstant four/eight-run comparisons; the median ratio is {statistics.median(ratios):.4f}. '+r'The ideal independent-run ratio is $1/\sqrt{2}\simeq0.7071$. Increases are retained. These comparisons do not demonstrate convergence of a flagged slow mode.'+'\n\n'
+    results+=r'The case precision gate uses the 12 physical static quantities listed in the methods. Count energy, higher energy moments and four raw estimators are additional audits; inefficient raw-estimator precision does not veto a converged conditional estimate. Analytic product-state controls and classical checks have their own stated scope.'+'\n'+r'\input{tables/cases.tex}'+'\n'
+    distributions=[(p,p['levels'][-1]) for p in job['points'] if p['levels'] and p['levels'][-1]['methods'].get('projector',{}).get('histogram')]
+    if distributions:
+        p,level=min(distributions,key=lambda pair:pair[1]['methods']['projector']['histogram']['fidelity_ground'])
+        summary=level['methods']['projector'];h=summary['histogram'];e=summary['observables']['E']
+        results+=r'\subsection{Why energy agreement is insufficient}'+'\n'+f'The lowest sampled ground-state fidelity occurs in case {p["id"]} at total projection {level["projection"]:g}. '+r'Energy per spin is $'+tex_number(e['mean'])+r'\pm'+tex_number(e['error'])+r'$; finite-projector ED gives $'+tex_number(e['projected_ed'])+r'$ and ground ED gives $'+tex_number(e['ground_ed'])+r'$. Sampled-state fidelity is $'+tex_number(h['fidelity_projected'])+r'$ to the finite projector, but $'+tex_number(h['fidelity_ground'])+r'$ to the ground state. Ground-distribution total variation is $'+tex_number(h['tvd_ground'])+r'$. Correct sampling of a finite projector does not imply sufficient ground projection.'+'\n\n'
+        slow=[(p,l,s) for p,l in distributions for s in [l['methods']['projector']] if s['observables']['mz2']['tau_int'] is not None]
+        if slow:
+            p,l,s=max(slow,key=lambda item:item[2]['observables']['mz2']['tau_int']);v=s['observables']['mz2'];e=s['observables']['E']
+            results+=f'The slowest final-level staggered mode is case {p["id"]}: '+r'$\tau_{\rm int}='+number(v['tau_int'])+r'$, ESS $'+number(v['ess'])+r'$, and $\widehat R='+number(v['rhat'])+r'$. Its energy residual is only $'+number(e['pull'])+r'$ SE from finite-projector ED. This mode requires improved mixing; broad error bars cannot justify GO.'+'\n'
+    (folder/'sections/results.tex').write_text(results,encoding='utf-8')
     (folder/'sections/limitations.tex').write_text(r'''\section{Limits and next algorithms}
 No finite benchmark proves correctness for every real coupling and every lattice size with 100\% confidence. Interacting ED is limited here to at most 16 spins; even periodic 2D geometry, uniform field, $J_3=0$ and the stated precision define this study. No thermodynamic phase boundary, real-time dynamics, or quantum ground-state susceptibility is certified. $h=0$ may have a degenerate ground manifold and needs explicit manifold/ensemble treatment. Very small nonzero fields or gaps can exceed any fixed projection or sampling budget; those cases must remain NO GO.
 
@@ -136,7 +187,7 @@ Ground projection with a symmetry-compatible trial can suppress irrelevant charg
 \clearpage\appendix\section{Final estimates for every measured static quantity}
 \input{tables/final-estimates.tex}
 \clearpage\section{Representative plots for every retained case}
-All measured static quantities and precision diagnostics also have individual PDF, SVG and PNG assets in the figures folder. Exact references have zero sampling error; their numerical residuals are recorded in metadata.
+All physical static quantities, energy-moment audits and representative precision diagnostics have individual PDF, SVG and PNG assets in the figures folder. Raw-estimator audits are included in the tables and metadata. Exact references have zero sampling error; their numerical residuals are recorded in metadata.
 \input{sections/figures.tex}
 \end{document}
 ''',encoding='utf-8')

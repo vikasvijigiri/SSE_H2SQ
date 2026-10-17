@@ -36,7 +36,8 @@ def main():
         pdf_sha256=hashlib.sha256((paper/'validation-report.pdf').read_bytes()).hexdigest(),input_sha256=inputs,auxiliary_directory=str(output))
     (paper/'metadata/latex-build.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     manifest={p.relative_to(paper).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paper.rglob('*')) if p.is_file() and p.name!='manifest.json'}
-    (paper/'metadata/manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8');print(json.dumps(result,indent=2))
+    (paper/'metadata/manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+    print(json.dumps({key:value for key,value in result.items() if key!='input_sha256'},indent=2))
 
 
 if __name__=='__main__':main()

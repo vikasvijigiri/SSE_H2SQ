@@ -19,7 +19,7 @@ def main():
     job=json.loads((folder/'study.json').read_text());assert job['status']=='complete'
     for name,sha in job['provenance']['source_sha256'].items():assert digest(folder/'sources'/sha/name)==sha,name
     for name,sha in job['provenance']['engine_sha256'].items():assert digest(folder/'engines'/f'{name}.exe')==sha,name
-    seeds=set();runs=0;rows=0;pulls=[];rhats=[];taus=[];effective=[];ratios=[];flags=[];distributions=[]
+    seeds=set();runs=0;rows=0;pulls=[];raw_pulls=[];constant_residuals=[];rhats=[];taus=[];effective=[];ratios=[];stochastic_ratios=[];flags=[];distributions=[]
     for point in job['points']:
         if point.get('orbit_reference'):
             reference=point['orbit_reference']
@@ -46,12 +46,17 @@ def main():
                 assert n==summary['retained_samples']
                 for key,v in summary['observables'].items():
                     assert abs(totals[key]/n-v['mean'])<1e-11*max(1.,abs(v['mean'])),(point['id'],method,key)
-                    if v['pull'] is not None:pulls.append(abs(v['pull']))
+                    if v['pull'] is not None:
+                        raw_pulls.append(abs(v['pull']))
+                        if v['tau_int'] is not None:pulls.append(abs(v['pull']))
+                    if v['tau_int'] is None and v['projected_ed'] is not None:
+                        constant_residuals.append(abs(v['mean']-v['projected_ed']))
                     if v['rhat'] is not None:rhats.append(v['rhat'])
                     if v['tau_int'] is not None:taus.append(v['tau_int']);effective.append(v['ess'])
                     if v['flags']:flags.append(dict(point=point['id'],T=level['projection'],method=method,observable=key,flags=v['flags']))
                 if summary.get('precision_history'):
                     ratios.extend(v['SE_ratio'] for v in summary['precision_history'][-1]['observables'].values() if v['SE_ratio'] is not None)
+                    stochastic_ratios.extend(v['SE_ratio'] for v in summary['precision_history'][-1]['observables'].values() if v['SE_ratio'] is not None and v['tau_int'] is not None)
                 if summary.get('histogram'):
                     h=summary['histogram'];assert abs(h['fidelity_ground']-h['reconstructed_state']['direct_ground_overlap'])<1e-10
                     distributions.append(dict(point=point['id'],T=level['projection'],**{k:h[k] for k in ['fidelity_ground','fidelity_projected','tvd_ground','missing_ground_weight']}))
@@ -62,7 +67,10 @@ def main():
     report=dict(id=job['id'],source_revision=job['provenance']['revision'],runs=runs,rows=rows,unique_seeds=len(seeds),
         universal_verdict=job['verdict']['universal'],requested_domain=job['verdict']['random_ground_domain'],
         maximum_absolute_ED_pull=max(pulls,default=None),maximum_rhat=max(rhats,default=None),minimum_ess=min(effective,default=None),
+        ED_pull_scope='Nonconstant traces with a measured autocorrelation; deterministic conditional estimators are compared in absolute units.',
+        maximum_raw_ED_pull=max(raw_pulls,default=None),maximum_absolute_constant_reference_residual=max(constant_residuals,default=None),
         tau_range=[min(taus,default=None),max(taus,default=None)],SE_ratios=dict(count=len(ratios),decreased=sum(r<1 for r in ratios),median=float(np.median(ratios)) if ratios else None),
+        stochastic_SE_ratios=dict(count=len(stochastic_ratios),decreased=sum(r<1 for r in stochastic_ratios),median=float(np.median(stochastic_ratios)) if stochastic_ratios else None),
         cases=[dict(id=p['id'],label=p['label'],verdict=p['verdict'],reasons=p.get('reasons',[])) for p in job['points']],flags=flags,distributions=distributions)
     if args.paper:
         paper=args.paper.resolve();assert paper.is_relative_to(ROOT)
