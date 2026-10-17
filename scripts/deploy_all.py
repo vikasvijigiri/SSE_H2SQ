@@ -90,7 +90,7 @@ def prepare():
         else:
             run([npm, "ci"], ROOT / "frontend")
         stamp.write_bytes(lock.read_bytes())
-    run(["make", "-C", ROOT / "backend/build", "all", "benchmark"])
+    run(["make", "-C", ROOT / "backend/build", "all", "benchmark", "projector"])
     run(["make", "-C", ROOT / "backend/build", "debugbin"])
 
 

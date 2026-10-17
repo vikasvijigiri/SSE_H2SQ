@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints import router as api_router
+from app.api.ground_endpoints import router as ground_router
 
 app = FastAPI(title="SSE_H2SQ Simulation API", version="1.0.0")
 
@@ -17,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+app.include_router(ground_router, prefix="/api")
 
 
 @app.get("/")
