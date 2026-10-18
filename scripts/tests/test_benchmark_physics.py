@@ -141,6 +141,97 @@ class CrossLanguageHamiltonianTests(unittest.TestCase):
                 expected = spectrum(lx, ly, j0, j1, j2, 0.)[0]
                 np.testing.assert_allclose(actual, expected, atol=3e-13, rtol=0)
 
+    def test_stacked_basis_energies_match_independent_periodic_3d_hamiltonian(self):
+        # Includes Lz=2, where the periodic +z sum contains two parallel
+        # layer links, and rectangular cells to expose indexing mistakes.
+        for lx, ly, lz, j0, j1, j2, j3 in [
+            (2, 2, 2, 1., .3, .07, -.19),
+            (4, 2, 2, 1., -.2, .035, .11),
+            (2, 4, 2, -.8, .15, -.04, .23),
+        ]:
+            with self.subTest(lattice=(lx, ly, lz)):
+                output = subprocess.check_output([
+                    str(self.exe), "stack", str(lx), str(ly), str(lz),
+                    str(j0), str(j1), str(j2), str(j3)
+                ], text=True)
+                actual = np.fromstring(output, sep="\n")
+
+                area, n = lx*ly, lx*ly*lz
+                plaquettes, pairs, _ = geometry(lx, ly)
+                states = 2*((np.arange(1 << n)[:, None] >> np.arange(n)) & 1)-1
+                expected = np.zeros(len(states))
+                for z in range(lz):
+                    layer = states[:, z*area:(z+1)*area]
+                    local = layer[:, plaquettes]
+                    expected -= j0*np.prod(local, axis=2).sum(axis=1)
+                    expected += j1*(local[:, :, 0]*local[:, :, 2] +
+                                    local[:, :, 1]*local[:, :, 3]).sum(axis=1)
+                    px, py = local @ (np.array([1, -1, -1, 1])/4), local @ (np.array([1, 1, -1, -1])/4)
+                    expected += j2*sum(px[:, a]*px[:, b] + py[:, a]*py[:, b] for a, b in pairs)
+                for z in range(lz):
+                    expected += j3*np.sum(states[:, z*area:(z+1)*area] *
+                                          states[:, ((z+1) % lz)*area:((z+1) % lz+1)*area], axis=1)
+                np.testing.assert_allclose(actual, expected, atol=4e-13, rtol=0)
+
+    def test_uniform_interlayer_signs_have_identical_small_stack_spectra(self):
+        # Exact finite-system check of the layer-flip unitary, including all
+        # in-plane interactions and the noncommuting transverse-field term.
+        lx = ly = lz = 2
+        area, n = lx*ly, lx*ly*lz
+        beta_params = dict(J0=1., J1=.27, J2=.041, hx=.23, J3=.19)
+        plaquettes, pairs, _ = geometry(lx, ly)
+        basis = np.arange(1 << n)
+        spins = 2*((basis[:, None] >> np.arange(n)) & 1)-1
+
+        def hamiltonian(j3):
+            diagonal = np.zeros(len(basis))
+            for z in range(lz):
+                local = spins[:, z*area:(z+1)*area][:, plaquettes]
+                diagonal -= beta_params["J0"]*np.prod(local, axis=2).sum(axis=1)
+                diagonal += beta_params["J1"]*(local[:, :, 0]*local[:, :, 2] +
+                                                 local[:, :, 1]*local[:, :, 3]).sum(axis=1)
+                px = local @ (np.array([1, -1, -1, 1])/4)
+                py = local @ (np.array([1, 1, -1, -1])/4)
+                diagonal += beta_params["J2"]*sum(
+                    px[:, a]*px[:, b] + py[:, a]*py[:, b] for a, b in pairs
+                )
+            for z in range(lz):
+                diagonal += j3*np.sum(spins[:, z*area:(z+1)*area] *
+                                      spins[:, ((z+1) % lz)*area:((z+1) % lz+1)*area], axis=1)
+            matrix = np.diag(diagonal)
+            for site in range(n):
+                matrix[basis, basis ^ (1 << site)] = -beta_params["hx"]
+            return matrix
+
+        h_plus, h_minus = hamiltonian(beta_params["J3"]), hamiltonian(-beta_params["J3"])
+        odd_layer_mask = sum(1 << (area + site) for site in range(area))
+        transformed_basis = basis ^ odd_layer_mask
+        np.testing.assert_allclose(
+            h_plus[np.ix_(transformed_basis, transformed_basis)], h_minus,
+            atol=2e-15, rtol=0
+        )
+        np.testing.assert_allclose(
+            np.linalg.eigvalsh(h_plus), np.linalg.eigvalsh(h_minus), atol=2e-13, rtol=0
+        )
+
+    def test_large_stacked_geometry_indices_and_checkerboard_periods(self):
+        for lx, ly, lz in [(8, 6, 4), (12, 10, 8)]:
+            with self.subTest(lattice=(lx, ly, lz)):
+                output = subprocess.check_output(
+                    [str(self.exe), "geometry", str(lx), str(ly), str(lz)], text=True
+                )
+                ns, black, white, pairs, _bonds, vertical = map(int, output.split())
+                self.assertEqual((ns, black, white, pairs, vertical),
+                                 (lx*ly*lz, lx*ly*lz//2, lx*ly*lz//2,
+                                  lx*ly*lz, lx*ly*lz))
+        for lx, ly, lz in [(3, 4, 2), (4, 5, 2), (1, 4, 2), (4, 4, 0)]:
+            with self.subTest(invalid_lattice=(lx, ly, lz)):
+                result = subprocess.run(
+                    [str(self.exe), "geometry", str(lx), str(ly), str(lz)],
+                    text=True, capture_output=True
+                )
+                self.assertNotEqual(result.returncode, 0)
+
     def test_exchange_detailed_balance_from_full_padded_sse_weights(self):
         for beta_a, beta_b, na, nb in [(.5, 2., 3, 7), (2., .5, 7, 3), (.3, 3., 5, 5)]:
             m, shift = 12, 13.7

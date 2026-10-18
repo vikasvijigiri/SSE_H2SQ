@@ -94,6 +94,18 @@ $(DBG_TARGET): $(SRCS) $(wildcard ../include/*.hpp)
 .PHONY: benchmark
 benchmark: sse_benchmark$(EXE_EXT)
 
+.PHONY: layered
+layered: sse_layered$(EXE_EXT)
+
+sse_layered$(EXE_EXT): ../benchmarks/layered.cpp $(filter-out ../src/main.cpp,$(SRCS)) $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/layered.cpp ../src/updates.cpp ../src/variables.cpp ../src/observables.cpp $(LDFLAGS) -o $@
+
+.PHONY: layered-contract
+layered-contract: layered_contract$(EXE_EXT)
+
+layered_contract$(EXE_EXT): ../benchmarks/layered_contract.cpp ../benchmarks/layered.cpp ../src/variables.cpp $(wildcard ../include/*.hpp)
+	$(CXX) -O2 -std=c++17 -Wall ../benchmarks/layered_contract.cpp ../src/variables.cpp $(LDFLAGS) -o $@
+
 .PHONY: projector
 projector: sse_projector$(EXE_EXT) emc_validation$(EXE_EXT)
 
