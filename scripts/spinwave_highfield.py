@@ -135,6 +135,110 @@ def exact_odd_gap(lx: int, ly: int, lz: int, j0: float, j1: float, j2: float, j3
     return gaps[-1] - min(gaps.values())
 
 
+def bloch_bond_shells(j1: float, j2: float, j3: float,
+                      lx: int = 8, ly: int = 8, lz: int = 4) -> list[list[tuple[int, int, int, int, float]]]:
+    """Extract directed pair bonds from one A/B spin basis in the checkerboard cell.
+
+    The checkerboard is periodic under a1=(1,1), a2=(1,-1).  A and B are the
+    even- and odd-parity physical spin sites, represented by (0,0) and (1,0).
+    A larger periodic cell avoids the coincident-bond special cases at L=2.
+    Entries are (other_sublattice, dx, dy, dz, J_ij), using physical-site
+    displacement so the Fourier phase is independent of basis gauge.
+    """
+    area = lx * ly
+    edges = pair_couplings(lx, ly, lz, j1, j2, j3)
+    shells: list[list[tuple[int, int, int, int, float]]] = [[], []]
+    roots = ((0, 0), (1, 0))
+
+    def minimum_image(delta: int, length: int) -> int:
+        return (delta + length // 2) % length - length // 2
+
+    for alpha, (x, y) in enumerate(roots):
+        root = x + lx * y + area  # take z=1, away from the vertical boundary
+        for (i, j), coupling in edges.items():
+            if i == root:
+                other = j
+            elif j == root:
+                other = i
+            else:
+                continue
+            z, rem = divmod(other, area)
+            oy, ox = divmod(rem, lx)
+            dx = minimum_image(ox - x, lx)
+            dy = minimum_image(oy - y, ly)
+            dz = minimum_image(z - 1, lz)
+            beta = (ox + oy) % 2
+            shells[alpha].append((beta, dx, dy, dz, coupling))
+    return shells
+
+
+def bloch_adjacency(q1: float, q2: float, kz: float,
+                    shells: list[list[tuple[int, int, int, int, float]]]) -> np.ndarray:
+    """2x2 Hermitian pair-coupling matrix at reduced momentum (q1,q2,kz).
+
+    q1=k dot a1 and q2=k dot a2 for the rotated checkerboard primitive cell.
+    The corresponding physical in-plane wave vector is
+    kx=(q1+q2)/2, ky=(q1-q2)/2 in inverse square-lattice spacings.
+    """
+    kx = 0.5 * (q1 + q2)
+    ky = 0.5 * (q1 - q2)
+    matrix = np.zeros((2, 2), dtype=np.complex128)
+    for alpha, bonds in enumerate(shells):
+        for beta, dx, dy, dz, coupling in bonds:
+            phase = np.exp(1j * (kx * dx + ky * dy + kz * dz))
+            matrix[alpha, beta] += coupling * phase
+    if not np.allclose(matrix, matrix.conj().T, atol=1e-11, rtol=0.):
+        raise ArithmeticError("Bloch pair-coupling matrix is not Hermitian.")
+    return matrix
+
+
+def spinwave_bands(qpoints: np.ndarray, j1: float, j2: float, j3: float,
+                   field: float, spin: float = 0.5) -> np.ndarray:
+    """Harmonic HP bands at rows (q1,q2,kz), in the same units as the couplings."""
+    shells = bloch_bond_shells(j1, j2, j3)
+    eigenvalues = np.asarray([
+        np.linalg.eigvalsh(bloch_adjacency(q1, q2, kz, shells))
+        for q1, q2, kz in np.asarray(qpoints, dtype=float)
+    ])
+    radicand = field * (field + 2.0 * spin * eigenvalues)
+    if np.any(radicand < -1e-12):
+        raise ValueError("The fully x-polarized state is harmonically unstable on this path.")
+    return 2.0 * np.sqrt(np.maximum(radicand, 0.0))
+
+
+def high_symmetry_path(points_per_segment: int = 80) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    """Simple-tetragonal path in q=(k.a1,k.a2,kz), returned in radians."""
+    if points_per_segment < 2:
+        raise ValueError("Use at least two points per high-symmetry segment.")
+    vertices = np.pi * np.asarray([
+        (0., 0., 0.),  # Gamma
+        (1., 0., 0.),  # X
+        (1., 1., 0.),  # M
+        (0., 0., 0.),  # Gamma
+        (0., 0., 1.),  # Z
+        (1., 0., 1.),  # R
+        (1., 1., 1.),  # A
+        (0., 0., 1.),  # Z
+    ])
+    labels = [r"$\Gamma$", "X", "M", r"$\Gamma$", "Z", "R", "A", "Z"]
+    qpoints = []
+    ticks = [0.]
+    for start, stop in zip(vertices[:-1], vertices[1:]):
+        qpoints.extend(start + t * (stop - start)
+                       for t in np.linspace(0., 1., points_per_segment, endpoint=False))
+        ticks.append(ticks[-1] + np.linalg.norm(_reduced_to_physical(stop) - _reduced_to_physical(start)))
+    qpoints.append(vertices[-1])
+    qpoints = np.asarray(qpoints)
+    physical = np.asarray([_reduced_to_physical(q) for q in qpoints])
+    distance = np.concatenate(([0.], np.cumsum(np.linalg.norm(np.diff(physical, axis=0), axis=1))))
+    return qpoints, distance, np.asarray(ticks), labels
+
+
+def _reduced_to_physical(qpoint: np.ndarray) -> np.ndarray:
+    q1, q2, kz = qpoint
+    return np.asarray([0.5 * (q1 + q2), 0.5 * (q1 - q2), kz])
+
+
 def run(lx: int = 2, ly: int = 2, lz: int = 2, j0: float = 1.0, j1: float = .3,
         j2: float = .025, j3_values: tuple[float, ...] = (-.3, 0., .3),
         fields: tuple[float, ...] = (2., 4., 8., 16.)) -> list[dict]:
@@ -236,6 +340,51 @@ def save(rows: list[dict], outdir: Path = OUTPUT) -> None:
     plt.close(fig)
 
 
+def save_spectrum_figure(outdir: Path, j0: float, j1: float, j2: float,
+                         j3_values: tuple[float, ...], field: float) -> None:
+    """Save the two-sublattice high-symmetry spectrum for representative J3 values."""
+    if j0 <= 0.:
+        raise ValueError("J0 must be positive to plot dimensionless frequencies.")
+    qpoints, distance, ticks, labels = high_symmetry_path()
+    j3_values = tuple(j3_values)
+    if not j3_values:
+        raise ValueError("At least one J3 value is required for the spectrum plot.")
+    plt.rcParams.update({"font.family": "serif", "font.serif": ["STIX Two Text", "STIXGeneral", "DejaVu Serif"],
+                         "mathtext.fontset": "stix", "font.size": 8.3, "axes.labelsize": 8.5,
+                         "axes.titlesize": 8.5, "legend.fontsize": 7.4, "xtick.labelsize": 7.8,
+                         "ytick.labelsize": 7.8, "axes.linewidth": .7, "lines.linewidth": 1.45,
+                         "pdf.fonttype": 42, "ps.fonttype": 42})
+    fig, axs = plt.subplots(1, len(j3_values), figsize=(7.15, 3.15), squeeze=False,
+                            sharey=True)
+    colors = ("#0072B2", "#D55E00")
+    for panel, (ax, j3) in enumerate(zip(axs[0], j3_values)):
+        bands = spinwave_bands(qpoints, j1, j2, j3, field) / j0
+        ax.plot(distance, bands[:, 0], color=colors[0], label="Lower branch")
+        ax.plot(distance, bands[:, 1], color=colors[1], label="Upper branch")
+        ax.set_title(fr"({chr(ord('a') + panel)})  $J_3/J_0={j3 / j0:g}$", loc="left", pad=6)
+        ax.set_xticks(ticks, labels)
+        for tick in ticks[1:-1]:
+            ax.axvline(tick, color="#AAB3BE", lw=.55, ls=(0, (2, 2)), zorder=0)
+        ax.tick_params(direction="in", top=True, right=True, length=3., width=.7)
+        ax.margins(x=0.)
+        for spine in ax.spines.values():
+            spine.set_linewidth(.65)
+        ax.set_xlabel("Wave vector along high-symmetry path")
+    axs[0, 0].set_ylabel(r"Harmonic frequency, $\omega/J_0$")
+    fig.suptitle(fr"High-field spin-wave spectrum: $K/J_0={field / j0:g}$, $J_1/J_0={j1 / j0:g}$, $J_2/J_0={j2 / j0:g}$",
+                 y=.985, fontsize=8.5)
+    handles, legend_labels = axs[0, 0].get_legend_handles_labels()
+    fig.legend(handles, legend_labels, frameon=False, ncol=2, loc="upper center",
+               bbox_to_anchor=(.5, .91), handlelength=2.0, columnspacing=2.0)
+    fig.subplots_adjust(left=.095, right=.99, bottom=.22, top=.79, wspace=.13)
+    outdir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(outdir / "highfield-spectrum.pdf")
+    fig.savefig(outdir / "highfield-spectrum.png", dpi=600)
+    PAPER_FIGURES.mkdir(parents=True, exist_ok=True)
+    fig.savefig(PAPER_FIGURES / "highfield-spectrum.pdf")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=OUTPUT)
@@ -247,10 +396,15 @@ def main() -> None:
     parser.add_argument("--j2", type=float, default=.025)
     parser.add_argument("--j3", type=float, nargs="+", default=[-.3, 0., .3])
     parser.add_argument("--fields", type=float, nargs="+", default=[2., 4., 8., 16.])
+    parser.add_argument("--spectrum-field", type=float, default=None,
+                        help="field for the high-symmetry bands (defaults to 4 J0)")
     args = parser.parse_args()
     rows = run(args.lx, args.ly, args.lz, args.j0, args.j1, args.j2,
                tuple(args.j3), tuple(args.fields))
     save(rows, args.output)
+    spectrum_field = 4. * args.j0 if args.spectrum_field is None else args.spectrum_field
+    spectrum_j3 = tuple(sorted({0., max((abs(value) for value in args.j3), default=0.)}))
+    save_spectrum_figure(args.output, args.j0, args.j1, args.j2, spectrum_j3, spectrum_field)
     print(json.dumps(rows, indent=2))
 
 
