@@ -253,7 +253,7 @@ def run(args):
     make_all_observables_figure(records,outdir,args)
     write_table(records,PAPER/"tables"/"layered-sign-benchmark.tex",args)
     (PAPER/"figures").mkdir(parents=True,exist_ok=True)
-    for stem in ("layered-sign-mapping","layered-all-observables"):
+    for stem in ("layered-physics-results","layered-all-observables"):
         for suffix in ("pdf","png","svg"):
             source=outdir/f"{stem}.{suffix}"
             if source.exists(): (PAPER/"figures"/source.name).write_bytes(source.read_bytes())
@@ -263,32 +263,60 @@ def run(args):
 
 
 def make_figure(records,outdir,args):
-    _style(); fig,axs=plt.subplots(1,3,figsize=(7.15,2.35),constrained_layout=True)
-    x=np.asarray([r["J3"] for r in records]); ed=[r["ED"] for r in records]; q=[r["QMC"] for r in records]
-    panels=[("E","Energy per pseudospin",r"$\langle H\rangle/N_s$"),
-            ("rho4",r"Polarized-ice diagnostic $\rho_4$",r"$\langle\rho_4\rangle$"),
-            ("dipole",r"Layer-resolved dipole structure",r"$S_P(q_z)$")]
-    for ax,(key,title,ylabel) in zip(axs,panels):
-        if key=="dipole":
-            for channel,name,color,edkey,qkey,offset in [
-                ("q0",r"$q_z=0$",PALETTE["q0"],"dipole_q0_sq","dipole_q0_sq",-.008),
-                ("qpi",r"$q_z=\pi$",PALETTE["qpi"],"dipole_qpi_sq","dipole_qpi_sq",.008)]:
-                ax.plot(x+offset,[r["ED"][edkey] for r in records],color=color,marker="s",ms=3.5,lw=1.05,label=f"ED {name}")
-                ax.errorbar(x+offset,[r["QMC"][qkey]["mean"] for r in records],
-                            yerr=[r["QMC"][qkey]["se"] for r in records],fmt="o",ms=3.2,
-                            mfc="white",mec=color,ecolor=color,capsize=1.8,lw=.8,label=f"SSE {name}")
-        else:
+    _style()
+    fig,axs=plt.subplots(2,2,figsize=(7.15,4.75),sharex=True)
+    x=np.asarray([r["J3"] for r in records])
+    ed_color="#263B53"; qmc_color="#007C91"
+    common=[("E",r"(a) Energy per pseudospin",r"$\langle H\rangle/N_s$"),
+            ("rho4",r"(b) Polarized-ice diagnostic",r"$\langle\rho_4\rangle$")]
+    for ax,(key,title,ylabel) in zip(axs[0],common):
+        edvals=[r["ED"][key] for r in records]
+        qvals=[r["QMC"][key]["mean"] for r in records]
+        errs=[r["QMC"][key]["se"] for r in records]
+        ax.plot(x,edvals,color=ed_color,marker="s",ms=4.,lw=1.1,label="ED, exact trace",zorder=2)
+        ax.errorbar(x,qvals,yerr=errs,fmt="o",ms=5.,mfc="white",mec=qmc_color,
+                    ecolor=qmc_color,capsize=2.2,lw=.85,label="SSE QMC, 1 SE",zorder=4)
+        ax.set_title(title,loc="left",pad=5)
+        ax.set_ylabel(ylabel)
+
+    channel_specs=[
+        (axs[1,0],r"(c) Dipole stacking channels",("dipole_q0_sq","dipole_qpi_sq"),r"$S_P(q_z)$"),
+        (axs[1,1],r"(d) Staggered-spin stacking channels",("spin_q0_sq","spin_qpi_sq"),r"$S_m(q_z)$"),
+    ]
+    for ax,title,keys,ylabel in channel_specs:
+        for key,color,marker,label in ((keys[0],PALETTE["q0"],"o",r"$q_z=0$"),
+                                       (keys[1],PALETTE["qpi"],"^",r"$q_z=\pi$")):
             edvals=[r["ED"][key] for r in records]
             qvals=[r["QMC"][key]["mean"] for r in records]
             errs=[r["QMC"][key]["se"] for r in records]
-            ax.plot(x,edvals,color=PALETTE["ed"],marker="s",ms=3.5,label="ED, exact trace")
-            ax.errorbar(x,qvals,yerr=errs,fmt="o",mfc="white",mec=PALETTE["q0"],ecolor=PALETTE["q0"],capsize=2,lw=.8,label="SSE, 1 SE")
-        ax.set_title(title,pad=5); ax.set_xlabel(r"$J_3/J_0$"); ax.set_ylabel(ylabel)
-        ax.tick_params(direction="in",top=True,right=True,length=3,width=.65)
-        ax.margins(x=.1); ax.legend(frameon=False,loc="best",handlelength=1.5)
-    fig.suptitle(fr"$ {args.lx}\times{args.ly}\times{args.lz}$ stack; $\beta J_0={args.beta:g}$, $J_1/J_0={args.j1:g}$, $J_2/J_0={args.j2:g}$, $h_x/J_0={args.hx:g}$",fontsize=8)
+            ax.plot(x,edvals,color=color,marker="s",ms=3.7,lw=1.0,label=f"ED {label}",zorder=2)
+            ax.errorbar(x,qvals,yerr=errs,fmt=marker,ms=4.2,mfc="white",mec=color,
+                        ecolor=color,capsize=2.0,lw=.8,label=f"SSE {label}",zorder=4)
+        ax.set_title(title,loc="left",pad=5)
+        ax.set_ylabel(ylabel)
+    for ax in axs.flat:
+        ax.set_xlabel(r"Interlayer coupling $J_3/J_0$")
+        ax.set_xticks(x)
+        ax.tick_params(direction="in",top=True,right=True,length=3.0,width=.65,labelsize=7.2)
+        ax.margins(x=.08,y=.12)
+        for spine in ax.spines.values(): spine.set_linewidth(.65)
+    from matplotlib.lines import Line2D
+    handles=[
+        Line2D([0],[0],color=ed_color,marker="s",lw=1.0,ms=4,label="ED, exact trace"),
+        Line2D([0],[0],color=qmc_color,marker="o",mfc="white",mec=qmc_color,
+               lw=0,ms=4.5,label="SSE QMC (bars: 1 SE)"),
+        Line2D([0],[0],color=PALETTE["q0"],lw=1.3,label=r"$q_z=0$ channel"),
+        Line2D([0],[0],color=PALETTE["qpi"],lw=1.3,label=r"$q_z=\pi$ channel"),
+    ]
+    fig.legend(handles=handles,frameon=False,ncol=4,loc="upper center",
+               bbox_to_anchor=(.5,.955),handlelength=1.7,columnspacing=1.4,
+               fontsize=6.9)
+    title=(r"Periodic $%dx%dx%d$ stack; $\beta J_0=%g$, $J_1/J_0=%g$, $J_2/J_0=%g$, $h_x/J_0=%g$"
+           % (args.lx,args.ly,args.lz,args.beta,args.j1,args.j2,args.hx))
+    fig.suptitle(title,fontsize=8.1,y=1.005)
+    fig.subplots_adjust(left=.10,right=.99,bottom=.11,top=.84,hspace=.32,wspace=.25)
     for suffix in ("pdf","svg","png"):
-        fig.savefig(outdir/f"layered-sign-mapping.{suffix}",dpi=600 if suffix=="png" else None)
+        fig.savefig(outdir/f"layered-physics-results.{suffix}",dpi=600 if suffix=="png" else None)
     plt.close(fig)
 
 
