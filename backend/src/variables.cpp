@@ -6,6 +6,7 @@
 #include <map>
 #include <iostream>
 #include <algorithm>
+#include <stdexcept>
 
 // --------------------------------------------------
 // Utility
@@ -21,6 +22,14 @@ static inline int mod(int a, int b)
 
 void Geometry::build(int Lx, int Ly, int Lz)
 {
+    // The periodic checkerboard coloring used by J0/J1/J2 closes only when
+    // both in-plane periods are even. Reject invalid cells before allocating
+    // or silently constructing a lattice with missing/miscolored bonds.
+    if (Lx < 2 || Ly < 2 || Lz < 1 || (Lx % 2) != 0 || (Ly % 2) != 0) {
+        throw std::invalid_argument(
+            "Periodic checkerboard geometry requires even Lx,Ly >= 2 and Lz >= 1.");
+    }
+
     blackPlaquettes.clear();
     whitePlaquettes.clear();
     neighbors.clear();
